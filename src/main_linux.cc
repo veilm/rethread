@@ -1,5 +1,9 @@
 #include "app/app.h"
 
+#include <cstdlib>
+#include <iostream>
+#include <string>
+
 #include "include/cef_app.h"
 
 #if defined(CEF_X11)
@@ -11,6 +15,70 @@
 
 #if defined(CEF_X11)
 namespace {
+
+struct CliOptions {
+  bool show_help = false;
+  std::string user_data_dir;
+};
+
+std::string GetEnv(const char* key) {
+  const char* value = std::getenv(key);
+  if (!value) {
+    return std::string();
+  }
+  return std::string(value);
+}
+
+std::string DefaultUserDataDir() {
+  std::string base = GetEnv("XDG_DATA_HOME");
+  if (base.empty()) {
+    std::string home = GetEnv("HOME");
+    if (home.empty()) {
+      return "rethread";
+    }
+    base = home + "/.local/share";
+  }
+  return base + "/rethread";
+}
+
+CliOptions ParseCliOptions(int argc, char* argv[]) {
+  CliOptions options;
+  for (int i = 1; i < argc; ++i) {
+    std::string arg = argv[i];
+    if (arg == "--help" || arg == "-h") {
+      options.show_help = true;
+      continue;
+    }
+    const std::string prefix = "--user-data-dir=";
+    if (arg.rfind(prefix, 0) == 0) {
+      options.user_data_dir = arg.substr(prefix.size());
+      continue;
+    }
+    if (arg == "--user-data-dir" && i + 1 < argc) {
+      options.user_data_dir = argv[++i];
+    }
+  }
+
+  if (options.user_data_dir.empty()) {
+    options.user_data_dir = DefaultUserDataDir();
+  }
+
+  return options;
+}
+
+void PrintHelp() {
+  std::cout << "Usage: rethread [options]\n"
+               "\n"
+               "Options:\n"
+               "  --help, -h            Show this message and exit.\n"
+               "  --user-data-dir=PATH  Override the directory used for browser profile\n"
+               "                        data (defaults to $XDG_DATA_HOME/rethread or\n"
+               "                        $HOME/.local/share/rethread).\n"
+               "  --url=URL             Initial page to load (defaults to\n"
+               "                        https://github.com/veilm/rethread).\n"
+               "  --initial-show-state=(normal|minimized|maximized|hidden)\n"
+               "                        Controls the first window's show state.\n";
+}
 
 int XErrorHandlerImpl(Display* display, XErrorEvent* event) {
   LOG(WARNING) << "X error received: " << "type " << event->type << ", "
@@ -32,6 +100,12 @@ using rethread::RethreadApp;
 
 NO_STACK_PROTECTOR
 int main(int argc, char* argv[]) {
+  CliOptions cli_options = ParseCliOptions(argc, argv);
+  if (cli_options.show_help) {
+    PrintHelp();
+    return 0;
+  }
+
   CefMainArgs main_args(argc, argv);
 
   int exit_code = CefExecuteProcess(main_args, nullptr, nullptr);
@@ -47,7 +121,8 @@ int main(int argc, char* argv[]) {
   CefRefPtr<CefCommandLine> command_line = CefCommandLine::CreateCommandLine();
   command_line->InitFromArgv(argc, argv);
 
-  CefSettings settings;
+CefSettings settings;
+CefString(&settings.cache_path).FromString(cli_options.user_data_dir);
 
 #if !defined(CEF_USE_SANDBOX)
   settings.no_sandbox = true;
