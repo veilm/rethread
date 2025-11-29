@@ -4,21 +4,41 @@ CEF_ROOT    ?= $(PWD)/third_party/cef/cef_binary_$(CEF_VERSION)_linux64
 OUT         ?= $(PWD)/out/Release
 CXX         ?= g++
 
-CXXFLAGS += -std=c++17 -O2 -fPIC -pthread -D_FILE_OFFSET_BITS=64
-CXXFLAGS += -I$(CEF_ROOT)/include
-# Keep it lean; add -Wall -Wextra if you like.
+# Detect where libcef.so lives
+CEF_BIN_DIR := $(shell \
+  if [ -f "$(CEF_ROOT)/Release/libcef.so" ]; then echo "$(CEF_ROOT)/Release"; \
+  elif [ -f "$(CEF_ROOT)/libcef.so" ]; then echo "$(CEF_ROOT)"; \
+  elif [ -f "$(CEF_ROOT)/Resources/libcef.so" ]; then echo "$(CEF_ROOT)/Resources"; \
+  else echo "$(CEF_ROOT)/Release"; fi)
 
-LDFLAGS  += -Wl,-rpath,'$$ORIGIN' -L$(CEF_ROOT)/Release -lcef -lpthread -ldl
+# Detect where resources (icudtl.dat, *.pak) live
+CEF_RES_DIR := $(shell \
+  if [ -f "$(CEF_ROOT)/icudtl.dat" ]; then echo "$(CEF_ROOT)"; \
+  elif [ -f "$(CEF_ROOT)/Resources/icudtl.dat" ]; then echo "$(CEF_ROOT)/Resources"; \
+  else echo "$(CEF_ROOT)"; fi)
+
+# Detect locales dir
+CEF_LOCALES_DIR := $(shell \
+  if [ -d "$(CEF_ROOT)/locales" ]; then echo "$(CEF_ROOT)/locales"; \
+  elif [ -d "$(CEF_ROOT)/Resources/locales" ]; then echo "$(CEF_ROOT)/Resources/locales"; \
+  else echo "$(CEF_ROOT)/locales"; fi)
+
+BASE_CXXFLAGS := -std=c++17 -O2 -fPIC -pthread -D_FILE_OFFSET_BITS=64 -I$(CEF_ROOT) -I$(CEF_ROOT)/include
+APP_CXXFLAGS  := $(BASE_CXXFLAGS) -DUSING_CEF_SHARED
+WRAP_CXXFLAGS := $(BASE_CXXFLAGS) -DWRAPPING_CEF_SHARED
+
+LDFLAGS  += -Wl,-rpath,'$$ORIGIN' -L$(CEF_BIN_DIR) -lcef -lpthread -ldl
+X11_LIBS := $(shell pkg-config --libs x11 xrandr xcursor xi xcomposite xdamage xrender xfixes xext 2>/dev/null)
+LDFLAGS  += $(X11_LIBS)
 
 # -------- wrapper (static lib) --------
 WRAP_DIR   := $(CEF_ROOT)/libcef_dll
-# Compile *all* .cc in libcef_dll except non-Linux platform files:
 WRAP_SRCS  := $(shell find $(WRAP_DIR) -name '*.cc' ! -name '*_win*.cc' ! -name '*_mac*.cc')
 WRAP_OBJS  := $(patsubst $(WRAP_DIR)/%.cc,$(OUT)/libcef_dll/%.o,$(WRAP_SRCS))
 WRAP_LIB   := $(OUT)/libcef_dll/libcef_dll_wrapper.a
 
 # -------- app --------
-APP_SRCS := src/main_linux.cc src/simple_app.cc src/simple_handler.cc
+APP_SRCS := src/cefsimple_linux.cc src/simple_app.cc src/simple_handler.cc src/simple_handler_linux.cc
 APP_OBJS := $(patsubst src/%.cc,$(OUT)/app/%.o,$(APP_SRCS))
 APP_BIN  := $(OUT)/mybrowser
 
@@ -27,7 +47,7 @@ all: $(APP_BIN) copy-resources
 
 $(OUT)/libcef_dll/%.o: $(WRAP_DIR)/%.cc
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(WRAP_CXXFLAGS) -c $< -o $@
 
 $(WRAP_LIB): $(WRAP_OBJS)
 	@mkdir -p $(dir $@)
@@ -35,26 +55,38 @@ $(WRAP_LIB): $(WRAP_OBJS)
 
 $(OUT)/app/%.o: src/%.cc
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(APP_CXXFLAGS) -c $< -o $@
 
 $(APP_BIN): $(WRAP_LIB) $(APP_OBJS)
 	@mkdir -p $(dir $@)
-	$(CXX) -o $@ $^ $(LDFLAGS)
+	$(CXX) -o $@ $(APP_OBJS) $(WRAP_LIB) $(LDFLAGS)
 
 copy-resources:
 	# Put runtime files next to the binary
-	cp -f $(CEF_ROOT)/Release/libcef.so $(OUT)/
-	cp -f $(CEF_ROOT)/icudtl.dat $(OUT)/
-	cp -f $(CEF_ROOT)/chrome_100_percent.pak $(OUT)/ || true
-	cp -f $(CEF_ROOT)/chrome_200_percent.pak $(OUT)/ || true
-	cp -f $(CEF_ROOT)/resources.pak $(OUT)/
-	mkdir -p $(OUT)/locales && cp -rf $(CEF_ROOT)/locales/* $(OUT)/locales/
+	cp -f $(CEF_BIN_DIR)/libcef.so $(OUT)/
+	# Core resources
+	cp -f $(CEF_RES_DIR)/icudtl.dat $(OUT)/
+	cp -f $(CEF_RES_DIR)/resources.pak $(OUT)/
+	# Optional (present in most bundles)
+	- cp -f $(CEF_RES_DIR)/chrome_100_percent.pak $(OUT)/
+	- cp -f $(CEF_RES_DIR)/chrome_200_percent.pak $(OUT)/
+	# V8 snapshot (present when needed)
+	- cp -f $(CEF_BIN_DIR)/v8_context_snapshot.bin $(OUT)/
+	# Locales
+	mkdir -p $(OUT)/locales
+	cp -rf $(CEF_LOCALES_DIR)/* $(OUT)/locales/
 
 run: all
-	# Dev only: --no-sandbox avoids SUID setup for chrome-sandbox
+	# Dev-only: --no-sandbox avoids SUID setup for chrome-sandbox
 	# cd $(OUT) && ./mybrowser --no-sandbox --url=https://google.com
-	# 1764380483 idk what that means but a sandbox is fine from my testing
 	cd $(OUT) && ./mybrowser --url=https://google.com
+
+# Optional: run without copying by pointing to in-place resources
+run-dev: $(APP_BIN)
+	cd $(OUT) && ./mybrowser --no-sandbox \
+	  --resources-dir-path="$(CEF_RES_DIR)" \
+	  --locales-dir-path="$(CEF_LOCALES_DIR)" \
+	  --url=https://google.com
 
 clean:
 	rm -rf $(OUT)
