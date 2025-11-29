@@ -1,5 +1,6 @@
 #include "app/app.h"
 
+#include <cctype>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -10,15 +11,16 @@
 #include <X11/Xlib.h>
 #endif
 
+#include "common/theme.h"
 #include "include/base/cef_logging.h"
 #include "include/cef_command_line.h"
 
-#if defined(CEF_X11)
 namespace {
 
 struct CliOptions {
   bool show_help = false;
   std::string user_data_dir;
+  uint32_t background_color = rethread::kDefaultBackgroundColor;
 };
 
 std::string GetEnv(const char* key) {
@@ -41,6 +43,44 @@ std::string DefaultUserDataDir() {
   return base + "/rethread";
 }
 
+bool ParseColorValue(const std::string& input, uint32_t* color) {
+  if (!color || input.empty()) {
+    return false;
+  }
+
+  std::string trimmed = input;
+  if (trimmed.rfind("0x", 0) == 0 || trimmed.rfind("0X", 0) == 0) {
+    trimmed = trimmed.substr(2);
+  }
+  if (!trimmed.empty() && trimmed[0] == '#') {
+    trimmed = trimmed.substr(1);
+  }
+
+  if (trimmed.size() != 6 && trimmed.size() != 8) {
+    return false;
+  }
+
+  for (char c : trimmed) {
+    if (!std::isxdigit(static_cast<unsigned char>(c))) {
+      return false;
+    }
+  }
+
+  uint32_t parsed = 0;
+  try {
+    parsed = static_cast<uint32_t>(std::stoul(trimmed, nullptr, 16));
+  } catch (...) {
+    return false;
+  }
+
+  if (trimmed.size() == 6) {
+    parsed |= 0xFF000000;
+  }
+
+  *color = parsed;
+  return true;
+}
+
 CliOptions ParseCliOptions(int argc, char* argv[]) {
   CliOptions options;
   for (int i = 1; i < argc; ++i) {
@@ -49,13 +89,38 @@ CliOptions ParseCliOptions(int argc, char* argv[]) {
       options.show_help = true;
       continue;
     }
-    const std::string prefix = "--user-data-dir=";
-    if (arg.rfind(prefix, 0) == 0) {
-      options.user_data_dir = arg.substr(prefix.size());
+
+    const std::string user_data_prefix = "--user-data-dir=";
+    if (arg.rfind(user_data_prefix, 0) == 0) {
+      options.user_data_dir = arg.substr(user_data_prefix.size());
       continue;
     }
     if (arg == "--user-data-dir" && i + 1 < argc) {
       options.user_data_dir = argv[++i];
+      continue;
+    }
+
+    const std::string color_prefix = "--background-color=";
+    if (arg.rfind(color_prefix, 0) == 0) {
+      uint32_t parsed_color = 0;
+      if (ParseColorValue(arg.substr(color_prefix.size()), &parsed_color)) {
+        options.background_color = parsed_color;
+      } else {
+        std::cerr << "Ignoring invalid --background-color value: "
+                  << arg.substr(color_prefix.size()) << std::endl;
+      }
+      continue;
+    }
+    if (arg == "--background-color" && i + 1 < argc) {
+      uint32_t parsed_color = 0;
+      if (ParseColorValue(argv[i + 1], &parsed_color)) {
+        options.background_color = parsed_color;
+      } else {
+        std::cerr << "Ignoring invalid --background-color value: "
+                  << argv[i + 1] << std::endl;
+      }
+      ++i;
+      continue;
     }
   }
 
@@ -74,12 +139,16 @@ void PrintHelp() {
                "  --user-data-dir=PATH  Override the directory used for browser profile\n"
                "                        data (defaults to $XDG_DATA_HOME/rethread or\n"
                "                        $HOME/.local/share/rethread).\n"
+               "  --background-color=HEX\n"
+               "                        Default background color in #RRGGBB or\n"
+               "                        #AARRGGBB format.\n"
                "  --url=URL             Initial page to load (defaults to\n"
                "                        https://github.com/veilm/rethread).\n"
                "  --initial-show-state=(normal|minimized|maximized|hidden)\n"
                "                        Controls the first window's show state.\n";
 }
 
+#if defined(CEF_X11)
 int XErrorHandlerImpl(Display* display, XErrorEvent* event) {
   LOG(WARNING) << "X error received: " << "type " << event->type << ", "
                << "serial " << event->serial << ", " << "error_code "
@@ -92,9 +161,9 @@ int XErrorHandlerImpl(Display* display, XErrorEvent* event) {
 int XIOErrorHandlerImpl(Display* display) {
   return 0;
 }
+#endif  // defined(CEF_X11)
 
 }  // namespace
-#endif  // defined(CEF_X11)
 
 using rethread::RethreadApp;
 
@@ -105,6 +174,8 @@ int main(int argc, char* argv[]) {
     PrintHelp();
     return 0;
   }
+
+  rethread::SetDefaultBackgroundColor(cli_options.background_color);
 
   CefMainArgs main_args(argc, argv);
 
@@ -121,8 +192,9 @@ int main(int argc, char* argv[]) {
   CefRefPtr<CefCommandLine> command_line = CefCommandLine::CreateCommandLine();
   command_line->InitFromArgv(argc, argv);
 
-CefSettings settings;
-CefString(&settings.cache_path).FromString(cli_options.user_data_dir);
+  CefSettings settings;
+  CefString(&settings.cache_path).FromString(cli_options.user_data_dir);
+  settings.background_color = cli_options.background_color;
 
 #if !defined(CEF_USE_SANDBOX)
   settings.no_sandbox = true;

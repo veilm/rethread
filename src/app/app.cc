@@ -4,6 +4,7 @@
 
 #include "browser/client.h"
 #include "browser/windowing.h"
+#include "common/theme.h"
 #include "include/cef_command_line.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_window.h"
@@ -52,11 +53,15 @@ void RethreadApp::OnContextInitialized() {
   options.alloy_runtime = true;
   CefRefPtr<BrowserClient> client(new BrowserClient(options));
 
+  const uint32_t background_color = GetDefaultBackgroundColor();
+
   CefBrowserSettings browser_settings;
+  browser_settings.background_color = background_color;
 
   CefRefPtr<CefBrowserView> browser_view = CefBrowserView::CreateBrowserView(
       client, ResolveStartupUrl(command_line), browser_settings, nullptr, nullptr,
       new PopupWindowDelegate());
+  browser_view->SetBackgroundColor(background_color);
 
   CefWindow::CreateTopLevelWindow(new MainWindowDelegate(
       browser_view, ResolveShowState(command_line)));

@@ -41,6 +41,7 @@ WRAP_LIB   := $(OUT)/libcef_dll/libcef_dll_wrapper.a
 APP_SRCS := \
 	src/main_linux.cc \
 	src/app/app.cc \
+	src/common/theme.cc \
 	src/browser/client.cc \
 	src/browser/client_linux.cc \
 	src/browser/windowing.cc

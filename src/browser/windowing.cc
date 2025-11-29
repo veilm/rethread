@@ -2,6 +2,8 @@
 
 #include "include/cef_browser.h"
 
+#include "common/theme.h"
+
 namespace rethread {
 namespace {
 constexpr cef_runtime_style_t kRuntimeStyle = CEF_RUNTIME_STYLE_ALLOY;
@@ -14,6 +16,7 @@ MainWindowDelegate::MainWindowDelegate(CefRefPtr<CefBrowserView> browser_view,
     : browser_view_(browser_view), initial_state_(initial_state) {}
 
 void MainWindowDelegate::OnWindowCreated(CefRefPtr<CefWindow> window) {
+  window->SetBackgroundColor(GetDefaultBackgroundColor());
   window->AddChildView(browser_view_);
   if (initial_state_ != CEF_SHOW_STATE_HIDDEN) {
     window->Show();

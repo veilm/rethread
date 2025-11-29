@@ -1,5 +1,6 @@
 #include "browser/client.h"
 
+#include <iomanip>
 #include <sstream>
 #include <string>
 
@@ -11,6 +12,8 @@
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
 
+#include "common/theme.h"
+
 namespace rethread {
 namespace {
 BrowserClient* g_browser_client = nullptr;
@@ -20,6 +23,14 @@ std::string BuildDataUri(const std::string& data,
   return "data:" + mime_type + ";base64," +
          CefURIEncode(CefBase64Encode(data.data(), data.size()), false)
              .ToString();
+}
+
+std::string ColorToCssHex(uint32_t color) {
+  std::ostringstream oss;
+  oss << "#" << std::uppercase << std::setfill('0') << std::hex
+      << std::setw(2) << ((color >> 16) & 0xFF) << std::setw(2)
+      << ((color >> 8) & 0xFF) << std::setw(2) << (color & 0xFF);
+  return oss.str();
 }
 }  // namespace
 
@@ -97,8 +108,14 @@ void BrowserClient::OnLoadError(CefRefPtr<CefBrowser> browser,
     return;
   }
 
+  const uint32_t background_color = GetDefaultBackgroundColor();
+  const std::string css_color = ColorToCssHex(background_color);
+
   std::stringstream ss;
-  ss << "<html><body bgcolor=\"white\">"
+  ss << "<html><body style=\"margin:0;padding:2em;font-family:sans-serif;"
+        "background-color:"
+     << css_color
+     << ";color:#f0f0f0;\">"
         "<h2>Failed to load URL "
      << std::string(failedUrl) << " with error " << std::string(errorText)
      << " (" << errorCode << ").</h2></body></html>";
