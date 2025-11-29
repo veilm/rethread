@@ -24,7 +24,7 @@ CEF_LOCALES_DIR := $(shell \
   else echo "$(CEF_ROOT)/locales"; fi)
 
 BASE_CXXFLAGS := -std=c++17 -O2 -fPIC -pthread -D_FILE_OFFSET_BITS=64 -I$(CEF_ROOT) -I$(CEF_ROOT)/include
-APP_CXXFLAGS  := $(BASE_CXXFLAGS) -DUSING_CEF_SHARED
+APP_CXXFLAGS  := $(BASE_CXXFLAGS) -DUSING_CEF_SHARED -Isrc
 WRAP_CXXFLAGS := $(BASE_CXXFLAGS) -DWRAPPING_CEF_SHARED
 
 LDFLAGS  += -Wl,-rpath,'$$ORIGIN' -L$(CEF_BIN_DIR) -lcef -lpthread -ldl
@@ -38,7 +38,12 @@ WRAP_OBJS  := $(patsubst $(WRAP_DIR)/%.cc,$(OUT)/libcef_dll/%.o,$(WRAP_SRCS))
 WRAP_LIB   := $(OUT)/libcef_dll/libcef_dll_wrapper.a
 
 # -------- app --------
-APP_SRCS := src/cefsimple_linux.cc src/simple_app.cc src/simple_handler.cc src/simple_handler_linux.cc
+APP_SRCS := \
+	src/main_linux.cc \
+	src/app/app.cc \
+	src/browser/client.cc \
+	src/browser/client_linux.cc \
+	src/browser/windowing.cc
 APP_OBJS := $(patsubst src/%.cc,$(OUT)/app/%.o,$(APP_SRCS))
 APP_BIN  := $(OUT)/rethread
 
@@ -78,19 +83,14 @@ copy-resources:
 
 run: all
 	# Dev-only: --no-sandbox avoids SUID setup for chrome-sandbox
-	# cd $(OUT) && ./rethread --no-sandbox --url=https://github.com/veilm/rethread
-	# cd $(OUT) && ./rethread --url=https://github.com/veilm/rethread
-	cd $(OUT) && ./rethread
+	cd $(OUT) && ./rethread --url=https://github.com/veilm/rethread
 
 # Optional: run without copying by pointing to in-place resources
 run-dev: $(APP_BIN)
-	# cd $(OUT) && ./rethread --no-sandbox \
-	#   --resources-dir-path="$(CEF_RES_DIR)" \
-	#   --locales-dir-path="$(CEF_LOCALES_DIR)" \
-	#   --url=https://github.com/veilm/rethread
 	cd $(OUT) && ./rethread --no-sandbox \
 	  --resources-dir-path="$(CEF_RES_DIR)" \
-	  --locales-dir-path="$(CEF_LOCALES_DIR)"
+	  --locales-dir-path="$(CEF_LOCALES_DIR)" \
+	  --url=https://github.com/veilm/rethread
 
 clean:
 	rm -rf $(OUT)
