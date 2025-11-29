@@ -40,7 +40,7 @@ WRAP_LIB   := $(OUT)/libcef_dll/libcef_dll_wrapper.a
 # -------- app --------
 APP_SRCS := src/cefsimple_linux.cc src/simple_app.cc src/simple_handler.cc src/simple_handler_linux.cc
 APP_OBJS := $(patsubst src/%.cc,$(OUT)/app/%.o,$(APP_SRCS))
-APP_BIN  := $(OUT)/mybrowser
+APP_BIN  := $(OUT)/rethread
 
 # -------- rules --------
 all: $(APP_BIN) copy-resources
@@ -78,12 +78,12 @@ copy-resources:
 
 run: all
 	# Dev-only: --no-sandbox avoids SUID setup for chrome-sandbox
-	# cd $(OUT) && ./mybrowser --no-sandbox --url=https://google.com
-	cd $(OUT) && ./mybrowser --url=https://google.com
+	# cd $(OUT) && ./rethread --no-sandbox --url=https://google.com
+	cd $(OUT) && ./rethread --url=https://google.com
 
 # Optional: run without copying by pointing to in-place resources
 run-dev: $(APP_BIN)
-	cd $(OUT) && ./mybrowser --no-sandbox \
+	cd $(OUT) && ./rethread --no-sandbox \
 	  --resources-dir-path="$(CEF_RES_DIR)" \
 	  --locales-dir-path="$(CEF_LOCALES_DIR)" \
 	  --url=https://google.com
