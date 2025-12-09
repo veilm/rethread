@@ -1,5 +1,7 @@
 #include "browser/windowing.h"
 
+#include <algorithm>
+
 #include "include/cef_browser.h"
 
 #include "common/theme.h"
@@ -9,7 +11,8 @@ namespace {
 constexpr cef_runtime_style_t kRuntimeStyle = CEF_RUNTIME_STYLE_ALLOY;
 constexpr int kDefaultWidth = 800;
 constexpr int kDefaultHeight = 600;
-constexpr int kTabStripWidth = 240;
+constexpr int kDefaultTabStripWidth = 260;
+constexpr int kDefaultTabStripHeight = 200;
 constexpr cef_color_t kTabBackgroundColor = CefColorSetARGB(224, 32, 32, 32);
 constexpr cef_color_t kTabForegroundColor = CefColorSetARGB(255, 240, 240, 240);
 }  // namespace
@@ -27,12 +30,16 @@ void MainWindowDelegate::OnWindowCreated(CefRefPtr<CefWindow> window) {
 
   tab_strip_ = new TabStripView();
   tab_strip_->Initialize();
-  tab_strip_->GetPanel()->SetBackgroundColor(kTabBackgroundColor);
+  CefRefPtr<CefPanel> tab_panel = tab_strip_->GetPanel();
+  if (tab_panel) {
+    tab_panel->SetBackgroundColor(kTabBackgroundColor);
+  }
   tab_strip_->SetTabs({{"github.com/veilm/rethread", true},
                        {"news.ycombinator.com", false}});
-  tab_overlay_ = window->AddOverlayView(tab_strip_->GetPanel(),
-                                        CEF_DOCKING_MODE_CUSTOM,
-                                        false);
+  if (tab_panel) {
+    tab_overlay_ =
+        window->AddOverlayView(tab_panel, CEF_DOCKING_MODE_CUSTOM, false);
+  }
   UpdateTabOverlayBounds(window);
   tab_overlay_->SetVisible(true);
 }
@@ -71,13 +78,21 @@ cef_runtime_style_t MainWindowDelegate::GetWindowRuntimeStyle() {
 
 void MainWindowDelegate::UpdateTabOverlayBounds(
     CefRefPtr<CefWindow> window) {
-  if (!tab_overlay_ || !window) {
+  if (!tab_overlay_ || !window || !tab_strip_) {
     return;
   }
   CefRect bounds = window->GetBounds();
-  CefRect tab_bounds;
-  tab_bounds.Set(0, 0, kTabStripWidth, bounds.height);
-  tab_overlay_->SetBounds(tab_bounds);
+  CefSize preferred = tab_strip_->GetPreferredSize();
+  int width = preferred.width > 0 ? preferred.width : kDefaultTabStripWidth;
+  int height =
+      preferred.height > 0 ? preferred.height : kDefaultTabStripHeight;
+  width = std::min(width, bounds.width);
+  height = std::min(height, bounds.height);
+
+  int x = (bounds.width - width) / 2;
+  int y = (bounds.height - height) / 2;
+
+  tab_overlay_->SetBounds(CefRect(x, y, width, height));
 }
 
 PopupWindowDelegate::PopupWindowDelegate() = default;

@@ -16,6 +16,7 @@
 #include <glib.h>
 #endif
 
+#include "common/debug_log.h"
 #include "common/theme.h"
 #include "include/base/cef_logging.h"
 #include "include/cef_command_line.h"
@@ -26,6 +27,8 @@ struct CliOptions {
   bool show_help = false;
   std::string user_data_dir;
   uint32_t background_color = rethread::kDefaultBackgroundColor;
+  std::string debug_log_path;
+  int auto_exit_seconds = 0;
 };
 
 std::string GetEnv(const char* key) {
@@ -127,6 +130,26 @@ CliOptions ParseCliOptions(int argc, char* argv[]) {
       ++i;
       continue;
     }
+
+    const std::string debug_log_prefix = "--debug-log=";
+    if (arg.rfind(debug_log_prefix, 0) == 0) {
+      options.debug_log_path = arg.substr(debug_log_prefix.size());
+      continue;
+    }
+    if (arg == "--debug-log" && i + 1 < argc) {
+      options.debug_log_path = argv[++i];
+      continue;
+    }
+
+    const std::string auto_exit_prefix = "--auto-exit=";
+    if (arg.rfind(auto_exit_prefix, 0) == 0) {
+      options.auto_exit_seconds = std::atoi(arg.substr(auto_exit_prefix.size()).c_str());
+      continue;
+    }
+    if (arg == "--auto-exit" && i + 1 < argc) {
+      options.auto_exit_seconds = std::atoi(argv[++i]);
+      continue;
+    }
   }
 
   if (options.user_data_dir.empty()) {
@@ -149,6 +172,9 @@ void PrintHelp() {
                "                        #AARRGGBB format.\n"
                "  --url=URL             Initial page to load (defaults to\n"
                "                        https://github.com/veilm/rethread).\n"
+               "  --debug-log=PATH      Append debug output to PATH.\n"
+               "  --auto-exit=SECONDS   Quit automatically after the given number of\n"
+               "                        seconds (best effort).\n"
 ;
 }
 
@@ -200,6 +226,10 @@ int main(int argc, char* argv[]) {
     return 0;
   }
 
+  if (!cli_options.debug_log_path.empty()) {
+    rethread::SetDebugLogPath(cli_options.debug_log_path);
+  }
+
   rethread::SetDefaultBackgroundColor(cli_options.background_color);
 
   CefMainArgs main_args(argc, argv);
@@ -229,7 +259,9 @@ int main(int argc, char* argv[]) {
   settings.no_sandbox = true;
 #endif
 
-  CefRefPtr<RethreadApp> app(new RethreadApp);
+  RethreadApp::Options app_options;
+  app_options.auto_exit_seconds = cli_options.auto_exit_seconds;
+  CefRefPtr<RethreadApp> app(new RethreadApp(app_options));
 
   if (!CefInitialize(main_args, settings, app.get(), nullptr)) {
     return CefGetExitCode();

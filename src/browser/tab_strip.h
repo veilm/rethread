@@ -5,13 +5,14 @@
 #include <vector>
 
 #include "include/views/cef_box_layout.h"
+#include "include/views/cef_button_delegate.h"
+#include "include/views/cef_label_button.h"
 #include "include/views/cef_panel.h"
 #include "include/views/cef_panel_delegate.h"
-#include "include/views/cef_textfield.h"
 
 namespace rethread {
 
-class TabStripView : public CefPanelDelegate {
+class TabStripView : public CefPanelDelegate, public CefButtonDelegate {
  public:
   struct Tab {
     std::string title;
@@ -22,8 +23,12 @@ class TabStripView : public CefPanelDelegate {
 
   void SetTabs(const std::vector<Tab>& tabs);
   void Initialize();
+  CefSize GetPreferredSize() const;
 
-  CefRefPtr<CefPanel> GetPanel() const { return panel_; }
+  CefRefPtr<CefPanel> GetPanel() const;
+
+  // CefButtonDelegate
+  void OnButtonPressed(CefRefPtr<CefButton> button) override {}
 
  private:
   void UpdateContent();

@@ -7,7 +7,11 @@ namespace rethread {
 
 class RethreadApp : public CefApp, public CefBrowserProcessHandler {
  public:
-  RethreadApp();
+  struct Options {
+    int auto_exit_seconds = 0;
+  };
+
+  explicit RethreadApp(const Options& options);
 
   CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
     return this;
@@ -17,6 +21,8 @@ class RethreadApp : public CefApp, public CefBrowserProcessHandler {
   CefRefPtr<CefClient> GetDefaultClient() override;
 
  private:
+  const Options options_;
+
   IMPLEMENT_REFCOUNTING(RethreadApp);
 };
 

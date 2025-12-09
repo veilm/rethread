@@ -4,10 +4,14 @@
 
 #include "browser/client.h"
 #include "browser/windowing.h"
+#include "common/debug_log.h"
 #include "common/theme.h"
+#include "include/base/cef_bind.h"
+#include "include/base/cef_callback.h"
 #include "include/cef_command_line.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_window.h"
+#include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
 
 namespace rethread {
@@ -23,9 +27,25 @@ std::string ResolveStartupUrl(const CefRefPtr<CefCommandLine>& command_line) {
   return url;
 }
 
+void PostAutoExitTask(int seconds) {
+  if (seconds <= 0) {
+    return;
+  }
+  CefPostDelayedTask(
+      TID_UI,
+      base::BindOnce(
+          []() {
+            if (auto* client = BrowserClient::Get()) {
+              client->CloseAllBrowsers(true);
+            } else {
+              CefQuitMessageLoop();
+            }
+          }),
+      seconds * 1000);
+}
 }  // namespace
 
-RethreadApp::RethreadApp() = default;
+RethreadApp::RethreadApp(const Options& options) : options_(options) {}
 
 void RethreadApp::OnContextInitialized() {
   CEF_REQUIRE_UI_THREAD();
@@ -48,6 +68,13 @@ void RethreadApp::OnContextInitialized() {
 
   CefWindow::CreateTopLevelWindow(
       new MainWindowDelegate(browser_view, CEF_SHOW_STATE_NORMAL));
+
+  AppendDebugLog("Tab strip initialized with placeholder tabs.");
+  if (options_.auto_exit_seconds > 0) {
+    AppendDebugLog("Auto-exit scheduled for " +
+                   std::to_string(options_.auto_exit_seconds) + " seconds.");
+    PostAutoExitTask(options_.auto_exit_seconds);
+  }
 }
 
 CefRefPtr<CefClient> RethreadApp::GetDefaultClient() {
