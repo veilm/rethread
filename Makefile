@@ -45,6 +45,7 @@ APP_SRCS := \
 	src/main_linux.cc \
 	src/app/app.cc \
 	src/common/theme.cc \
+	src/browser/tab_strip.cc \
 	src/browser/client.cc \
 	src/browser/client_linux.cc \
 	src/browser/windowing.cc

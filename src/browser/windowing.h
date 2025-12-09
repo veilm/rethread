@@ -2,7 +2,11 @@
 #define RETHREAD_BROWSER_WINDOWING_H_
 
 #include "include/base/cef_macros.h"
+#include "include/internal/cef_types.h"
+#include "browser/tab_strip.h"
+
 #include "include/views/cef_browser_view.h"
+#include "include/views/cef_overlay_controller.h"
 #include "include/views/cef_window.h"
 
 namespace rethread {
@@ -14,6 +18,8 @@ class MainWindowDelegate : public CefWindowDelegate {
                      cef_show_state_t initial_state);
 
   void OnWindowCreated(CefRefPtr<CefWindow> window) override;
+  void OnWindowBoundsChanged(CefRefPtr<CefWindow> window,
+                             const CefRect& new_bounds) override;
   void OnWindowDestroyed(CefRefPtr<CefWindow> window) override;
   bool CanClose(CefRefPtr<CefWindow> window) override;
   CefSize GetPreferredSize(CefRefPtr<CefView> view) override;
@@ -23,6 +29,10 @@ class MainWindowDelegate : public CefWindowDelegate {
  private:
   CefRefPtr<CefBrowserView> browser_view_;
   const cef_show_state_t initial_state_;
+  CefRefPtr<CefOverlayController> tab_overlay_;
+  CefRefPtr<TabStripView> tab_strip_;
+
+  void UpdateTabOverlayBounds(CefRefPtr<CefWindow> window);
 
   IMPLEMENT_REFCOUNTING(MainWindowDelegate);
   DISALLOW_COPY_AND_ASSIGN(MainWindowDelegate);
