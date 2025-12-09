@@ -24,12 +24,15 @@ CEF_LOCALES_DIR := $(shell \
   else echo "$(CEF_ROOT)/locales"; fi)
 
 BASE_CXXFLAGS := -std=c++17 -O2 -fPIC -pthread -D_FILE_OFFSET_BITS=64 -I$(CEF_ROOT) -I$(CEF_ROOT)/include
-APP_CXXFLAGS  := $(BASE_CXXFLAGS) -DUSING_CEF_SHARED -Isrc
+GLIB_CFLAGS   := $(shell pkg-config --cflags glib-2.0 2>/dev/null)
+APP_CXXFLAGS  := $(BASE_CXXFLAGS) -DUSING_CEF_SHARED -Isrc $(GLIB_CFLAGS)
 WRAP_CXXFLAGS := $(BASE_CXXFLAGS) -DWRAPPING_CEF_SHARED
 
 LDFLAGS  += -Wl,-rpath,'$$ORIGIN' -L$(CEF_BIN_DIR) -lcef -lpthread -ldl
 X11_LIBS := $(shell pkg-config --libs x11 xrandr xcursor xi xcomposite xdamage xrender xfixes xext 2>/dev/null)
+GLIB_LIBS := $(shell pkg-config --libs glib-2.0 2>/dev/null)
 LDFLAGS  += $(X11_LIBS)
+LDFLAGS  += $(GLIB_LIBS)
 
 # -------- wrapper (static lib) --------
 WRAP_DIR   := $(CEF_ROOT)/libcef_dll

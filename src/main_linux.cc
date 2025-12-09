@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <string>
 
@@ -9,6 +10,10 @@
 
 #if defined(CEF_X11)
 #include <X11/Xlib.h>
+#endif
+
+#if defined(__linux__)
+#include <glib.h>
 #endif
 
 #include "common/theme.h"
@@ -162,6 +167,27 @@ int XIOErrorHandlerImpl(Display* display) {
 }
 #endif  // defined(CEF_X11)
 
+#if defined(__linux__)
+void IBusLogHandler(const gchar* log_domain,
+                    GLogLevelFlags log_level,
+                    const gchar* message,
+                    gpointer user_data) {
+  if (message && std::strstr(message, "Unable to connect to ibus")) {
+    return;
+  }
+
+  g_log_default_handler(log_domain, log_level, message, user_data);
+}
+
+void SuppressIbusWarnings() {
+  g_log_set_handler("IBus",
+                    static_cast<GLogLevelFlags>(G_LOG_LEVEL_WARNING |
+                                                G_LOG_LEVEL_CRITICAL |
+                                                G_LOG_LEVEL_ERROR),
+                    IBusLogHandler, nullptr);
+}
+#endif  // defined(__linux__)
+
 }  // namespace
 
 using rethread::RethreadApp;
@@ -177,6 +203,10 @@ int main(int argc, char* argv[]) {
   rethread::SetDefaultBackgroundColor(cli_options.background_color);
 
   CefMainArgs main_args(argc, argv);
+
+#if defined(__linux__)
+  SuppressIbusWarnings();
+#endif
 
   int exit_code = CefExecuteProcess(main_args, nullptr, nullptr);
   if (exit_code >= 0) {
