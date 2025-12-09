@@ -2,6 +2,7 @@
 #define RETHREAD_BROWSER_CLIENT_H_
 
 #include <list>
+#include <string>
 
 #include "include/cef_client.h"
 #include "include/cef_context_menu_handler.h"
@@ -16,6 +17,7 @@ class BrowserClient : public CefClient,
  public:
   struct Options {
     bool alloy_runtime = true;
+    std::string menu_command = "menu x";
   };
 
   explicit BrowserClient(const Options& options);

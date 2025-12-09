@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "include/base/cef_callback.h"
 #include "include/cef_app.h"
@@ -32,6 +33,69 @@ std::string ColorToCssHex(uint32_t color) {
       << std::setw(2) << ((color >> 16) & 0xFF) << std::setw(2)
       << ((color >> 8) & 0xFF) << std::setw(2) << (color & 0xFF);
   return oss.str();
+}
+std::string EncodeField(const std::string& value) {
+  return CefURIEncode(value, false).ToString();
+}
+
+void AppendField(std::vector<std::string>* lines,
+                 const std::string& key,
+                 const std::string& value) {
+  if (value.empty()) {
+    return;
+  }
+  lines->emplace_back(key + "=" + EncodeField(value));
+}
+
+std::string BuildMenuPayload(const CefRefPtr<CefContextMenuParams>& params) {
+  std::vector<std::string> lines;
+  lines.emplace_back("type_flags=" + std::to_string(params->GetTypeFlags()));
+  lines.emplace_back("x=" + std::to_string(params->GetXCoord()));
+  lines.emplace_back("y=" + std::to_string(params->GetYCoord()));
+  lines.emplace_back("editable=" + std::string(params->IsEditable() ? "1" : "0"));
+  AppendField(&lines, "selection",
+              params->GetSelectionText().ToString());
+  AppendField(&lines, "link_url",
+              params->GetLinkUrl().ToString());
+  AppendField(&lines, "source_url",
+              params->GetSourceUrl().ToString());
+  AppendField(&lines, "page_url",
+              params->GetPageUrl().ToString());
+  AppendField(&lines, "frame_url",
+              params->GetFrameUrl().ToString());
+  if (params->GetMediaType() != CM_MEDIATYPE_NONE) {
+    lines.emplace_back("media_type=" + std::to_string(params->GetMediaType()));
+  }
+  
+  std::ostringstream payload;
+  for (const auto& line : lines) {
+    payload << line << '\n';
+  }
+  return payload.str();
+}
+
+void LaunchMenuCommand(const std::string& command,
+                       const CefRefPtr<CefContextMenuParams>& params) {
+  if (command.empty()) {
+    return;
+  }
+  const std::string payload = BuildMenuPayload(params);
+
+  std::ostringstream full_command;
+  full_command << "(printf '%s' \"";
+  for (char c : payload) {
+    if (c == '"' || c == '\\' || c == '$' || c == '`') {
+      full_command << '\\';
+    }
+    if (c == '\n') {
+      full_command << "\\n";
+      continue;
+    }
+    full_command << c;
+  }
+  full_command << "\" | " << command << ") &";
+
+  std::system(full_command.str().c_str());
 }
 }  // namespace
 
@@ -134,7 +198,7 @@ void BrowserClient::OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
     model->Clear();
   }
 
-  std::system("alert rightclick &");
+  LaunchMenuCommand(options_.menu_command, params);
 }
 
 void BrowserClient::ShowMainWindow() {
