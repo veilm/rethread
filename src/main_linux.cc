@@ -144,8 +144,7 @@ void PrintHelp() {
                "                        #AARRGGBB format.\n"
                "  --url=URL             Initial page to load (defaults to\n"
                "                        https://github.com/veilm/rethread).\n"
-               "  --initial-show-state=(normal|minimized|maximized|hidden)\n"
-               "                        Controls the first window's show state.\n";
+;
 }
 
 #if defined(CEF_X11)

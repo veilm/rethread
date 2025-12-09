@@ -13,7 +13,6 @@
 namespace rethread {
 namespace {
 constexpr char kUrlSwitch[] = "url";
-constexpr char kInitialShowStateSwitch[] = "initial-show-state";
 constexpr char kDefaultUrl[] = "https://github.com/veilm/rethread";
 
 std::string ResolveStartupUrl(const CefRefPtr<CefCommandLine>& command_line) {
@@ -22,22 +21,6 @@ std::string ResolveStartupUrl(const CefRefPtr<CefCommandLine>& command_line) {
     return kDefaultUrl;
   }
   return url;
-}
-
-cef_show_state_t ResolveShowState(const CefRefPtr<CefCommandLine>& command_line) {
-  const std::string value = command_line->GetSwitchValue(kInitialShowStateSwitch);
-  if (value == "minimized") {
-    return CEF_SHOW_STATE_MINIMIZED;
-  }
-  if (value == "maximized") {
-    return CEF_SHOW_STATE_MAXIMIZED;
-  }
-#if defined(OS_MAC)
-  if (value == "hidden") {
-    return CEF_SHOW_STATE_HIDDEN;
-  }
-#endif
-  return CEF_SHOW_STATE_NORMAL;
 }
 
 }  // namespace
@@ -63,8 +46,8 @@ void RethreadApp::OnContextInitialized() {
       new PopupWindowDelegate());
   browser_view->SetBackgroundColor(background_color);
 
-  CefWindow::CreateTopLevelWindow(new MainWindowDelegate(
-      browser_view, ResolveShowState(command_line)));
+  CefWindow::CreateTopLevelWindow(
+      new MainWindowDelegate(browser_view, CEF_SHOW_STATE_NORMAL));
 }
 
 CefRefPtr<CefClient> RethreadApp::GetDefaultClient() {

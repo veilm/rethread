@@ -158,7 +158,8 @@ void BrowserClient::CloseAllBrowsers(bool force_close) {
     return;
   }
 
-  for (const auto& browser : browser_list_) {
+  BrowserList browsers_to_close = browser_list_;
+  for (const auto& browser : browsers_to_close) {
     browser->GetHost()->CloseBrowser(force_close);
   }
 }
