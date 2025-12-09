@@ -4,13 +4,15 @@
 #include <list>
 
 #include "include/cef_client.h"
+#include "include/cef_context_menu_handler.h"
 
 namespace rethread {
 
 class BrowserClient : public CefClient,
                       public CefDisplayHandler,
                       public CefLifeSpanHandler,
-                      public CefLoadHandler {
+                      public CefLoadHandler,
+                      public CefContextMenuHandler {
  public:
   struct Options {
     bool alloy_runtime = true;
@@ -24,6 +26,9 @@ class BrowserClient : public CefClient,
   CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
   CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
+  CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() override {
+    return this;
+  }
 
   void OnTitleChange(CefRefPtr<CefBrowser> browser,
                      const CefString& title) override;
@@ -35,6 +40,11 @@ class BrowserClient : public CefClient,
                    ErrorCode errorCode,
                    const CefString& errorText,
                    const CefString& failedUrl) override;
+
+  void OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
+                           CefRefPtr<CefFrame> frame,
+                           CefRefPtr<CefContextMenuParams> params,
+                           CefRefPtr<CefMenuModel> model) override;
 
   void ShowMainWindow();
   void CloseAllBrowsers(bool force_close);

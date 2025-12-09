@@ -1,5 +1,6 @@
 #include "browser/client.h"
 
+#include <cstdlib>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -121,6 +122,19 @@ void BrowserClient::OnLoadError(CefRefPtr<CefBrowser> browser,
      << " (" << errorCode << ").</h2></body></html>";
 
   frame->LoadURL(BuildDataUri(ss.str(), "text/html"));
+}
+
+void BrowserClient::OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
+                                        CefRefPtr<CefFrame> frame,
+                                        CefRefPtr<CefContextMenuParams> params,
+                                        CefRefPtr<CefMenuModel> model) {
+  CEF_REQUIRE_UI_THREAD();
+
+  if (model) {
+    model->Clear();
+  }
+
+  std::system("alert rightclick &");
 }
 
 void BrowserClient::ShowMainWindow() {

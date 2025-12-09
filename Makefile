@@ -70,6 +70,12 @@ $(APP_BIN): $(WRAP_LIB) $(APP_OBJS)
 copy-resources:
 	# Put runtime files next to the binary
 	cp -f $(CEF_BIN_DIR)/libcef.so $(OUT)/
+	# GPU / EGL libs expected next to the binary
+	- cp -f $(CEF_BIN_DIR)/libEGL.so $(OUT)/
+	- cp -f $(CEF_BIN_DIR)/libGLESv2.so $(OUT)/
+	- cp -f $(CEF_BIN_DIR)/libvk_swiftshader.so $(OUT)/
+	- cp -f $(CEF_BIN_DIR)/libvulkan.so.1 $(OUT)/
+	- cp -f $(CEF_BIN_DIR)/vk_swiftshader_icd.json $(OUT)/
 	# Core resources
 	cp -f $(CEF_RES_DIR)/icudtl.dat $(OUT)/
 	cp -f $(CEF_RES_DIR)/resources.pak $(OUT)/
