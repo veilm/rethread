@@ -3,6 +3,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <string>
 
@@ -16,6 +17,7 @@
 #include <glib.h>
 #endif
 
+#include "app/tab_cli.h"
 #include "common/debug_log.h"
 #include "common/theme.h"
 #include "include/base/cef_logging.h"
@@ -220,10 +222,22 @@ using rethread::RethreadApp;
 
 NO_STACK_PROTECTOR
 int main(int argc, char* argv[]) {
+  if (argc >= 2 && std::string(argv[1]) == "tabs") {
+    return rethread::RunTabCli(argc - 2, argv + 2, DefaultUserDataDir());
+  }
+
   CliOptions cli_options = ParseCliOptions(argc, argv);
   if (cli_options.show_help) {
     PrintHelp();
     return 0;
+  }
+
+  std::error_code dir_err;
+  std::filesystem::create_directories(cli_options.user_data_dir, dir_err);
+  if (dir_err) {
+    std::cerr << "Warning: failed to ensure user data dir "
+              << cli_options.user_data_dir << ": " << dir_err.message()
+              << std::endl;
   }
 
   if (!cli_options.debug_log_path.empty()) {
@@ -261,6 +275,8 @@ int main(int argc, char* argv[]) {
 
   RethreadApp::Options app_options;
   app_options.auto_exit_seconds = cli_options.auto_exit_seconds;
+  app_options.tab_socket_path =
+      rethread::TabSocketPath(cli_options.user_data_dir);
   CefRefPtr<RethreadApp> app(new RethreadApp(app_options));
 
   if (!CefInitialize(main_args, settings, app.get(), nullptr)) {

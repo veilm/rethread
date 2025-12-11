@@ -3,13 +3,15 @@
 #include <string>
 
 #include "browser/client.h"
+#include "browser/tab_ipc_server.h"
+#include "browser/tab_manager.h"
 #include "browser/windowing.h"
 #include "common/debug_log.h"
 #include "common/theme.h"
 #include "include/base/cef_bind.h"
 #include "include/base/cef_callback.h"
 #include "include/cef_command_line.h"
-#include "include/views/cef_browser_view.h"
+#include "include/cef_request_context.h"
 #include "include/views/cef_window.h"
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
@@ -47,6 +49,10 @@ void PostAutoExitTask(int seconds) {
 
 RethreadApp::RethreadApp(const Options& options) : options_(options) {}
 
+RethreadApp::~RethreadApp() {
+  TabIpcServer::Get()->Stop();
+}
+
 void RethreadApp::OnContextInitialized() {
   CEF_REQUIRE_UI_THREAD();
 
@@ -58,18 +64,25 @@ void RethreadApp::OnContextInitialized() {
 
   const uint32_t background_color = GetDefaultBackgroundColor();
 
-  CefBrowserSettings browser_settings;
-  browser_settings.background_color = background_color;
+  auto* tab_manager = TabManager::Get();
+  if (!tab_manager->IsInitialized()) {
+    TabManager::InitParams params;
+    params.client = client;
+    params.request_context = CefRequestContext::GetGlobalContext();
+    params.popup_delegate = new PopupWindowDelegate();
+    params.background_color = background_color;
+    tab_manager->Initialize(params);
+  }
 
-  CefRefPtr<CefBrowserView> browser_view = CefBrowserView::CreateBrowserView(
-      client, ResolveStartupUrl(command_line), browser_settings, nullptr, nullptr,
-      new PopupWindowDelegate());
-  browser_view->SetBackgroundColor(background_color);
+  tab_manager->OpenTab(ResolveStartupUrl(command_line), true);
 
   CefWindow::CreateTopLevelWindow(
-      new MainWindowDelegate(browser_view, CEF_SHOW_STATE_NORMAL));
+      new MainWindowDelegate(CEF_SHOW_STATE_NORMAL));
 
-  AppendDebugLog("Tab strip initialized with placeholder tabs.");
+  AppendDebugLog("Tab manager initialized.");
+  if (!options_.tab_socket_path.empty()) {
+    TabIpcServer::Get()->Start(options_.tab_socket_path);
+  }
   if (options_.auto_exit_seconds > 0) {
     AppendDebugLog("Auto-exit scheduled for " +
                    std::to_string(options_.auto_exit_seconds) + " seconds.");

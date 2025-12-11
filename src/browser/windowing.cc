@@ -4,6 +4,7 @@
 
 #include "include/cef_browser.h"
 
+#include "browser/tab_manager.h"
 #include "common/theme.h"
 
 namespace rethread {
@@ -17,31 +18,43 @@ constexpr cef_color_t kTabBackgroundColor = CefColorSetARGB(224, 32, 32, 32);
 constexpr cef_color_t kTabForegroundColor = CefColorSetARGB(255, 240, 240, 240);
 }  // namespace
 
+MainWindowDelegate::MainWindowDelegate(cef_show_state_t initial_state)
+    : initial_state_(initial_state) {}
+
 MainWindowDelegate::MainWindowDelegate(CefRefPtr<CefBrowserView> browser_view,
                                        cef_show_state_t initial_state)
     : browser_view_(browser_view), initial_state_(initial_state) {}
 
 void MainWindowDelegate::OnWindowCreated(CefRefPtr<CefWindow> window) {
   window->SetBackgroundColor(GetDefaultBackgroundColor());
-  window->AddChildView(browser_view_);
+  if (browser_view_) {
+    window->AddChildView(browser_view_);
+  } else if (auto* tab_manager = TabManager::Get()) {
+    tab_manager->AttachWindow(window);
+  }
   if (initial_state_ != CEF_SHOW_STATE_HIDDEN) {
     window->Show();
   }
 
-  tab_strip_ = new TabStripView();
-  tab_strip_->Initialize();
-  CefRefPtr<CefPanel> tab_panel = tab_strip_->GetPanel();
-  if (tab_panel) {
-    tab_panel->SetBackgroundColor(kTabBackgroundColor);
+  if (!browser_view_) {
+    tab_strip_ = new TabStripView();
+    tab_strip_->Initialize();
+    CefRefPtr<CefPanel> tab_panel = tab_strip_->GetPanel();
+    if (tab_panel) {
+      tab_panel->SetBackgroundColor(kTabBackgroundColor);
+    }
+    if (auto* tab_manager = TabManager::Get()) {
+      tab_manager->BindTabStrip(tab_strip_);
+    }
+    if (tab_panel) {
+      tab_overlay_ =
+          window->AddOverlayView(tab_panel, CEF_DOCKING_MODE_CUSTOM, false);
+    }
+    UpdateTabOverlayBounds(window);
+    if (tab_overlay_) {
+      tab_overlay_->SetVisible(true);
+    }
   }
-  tab_strip_->SetTabs({{"github.com/veilm/rethread", true},
-                       {"news.ycombinator.com", false}});
-  if (tab_panel) {
-    tab_overlay_ =
-        window->AddOverlayView(tab_panel, CEF_DOCKING_MODE_CUSTOM, false);
-  }
-  UpdateTabOverlayBounds(window);
-  tab_overlay_->SetVisible(true);
 }
 
 void MainWindowDelegate::OnWindowBoundsChanged(CefRefPtr<CefWindow> window,
@@ -50,17 +63,32 @@ void MainWindowDelegate::OnWindowBoundsChanged(CefRefPtr<CefWindow> window,
 }
 
 void MainWindowDelegate::OnWindowDestroyed(CefRefPtr<CefWindow> window) {
+  if (!browser_view_) {
+    if (auto* tab_manager = TabManager::Get()) {
+      tab_manager->UnbindTabStrip(tab_strip_);
+      tab_manager->DetachWindow(window);
+    }
+  }
   tab_overlay_ = nullptr;
   tab_strip_ = nullptr;
   browser_view_ = nullptr;
 }
 
 bool MainWindowDelegate::CanClose(CefRefPtr<CefWindow> window) {
-  CefRefPtr<CefBrowser> browser = browser_view_->GetBrowser();
-  if (!browser) {
-    return true;
+  if (browser_view_) {
+    CefRefPtr<CefBrowser> browser = browser_view_->GetBrowser();
+    if (!browser) {
+      return true;
+    }
+    return browser->GetHost()->TryCloseBrowser();
   }
-  return browser->GetHost()->TryCloseBrowser();
+  if (auto* tab_manager = TabManager::Get()) {
+    CefRefPtr<CefBrowser> browser = tab_manager->GetActiveBrowser();
+    if (browser) {
+      return browser->GetHost()->TryCloseBrowser();
+    }
+  }
+  return true;
 }
 
 CefSize MainWindowDelegate::GetPreferredSize(CefRefPtr<CefView> view) {

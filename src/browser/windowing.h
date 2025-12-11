@@ -1,9 +1,9 @@
 #ifndef RETHREAD_BROWSER_WINDOWING_H_
 #define RETHREAD_BROWSER_WINDOWING_H_
 
+#include "browser/tab_strip.h"
 #include "include/base/cef_macros.h"
 #include "include/internal/cef_types.h"
-#include "browser/tab_strip.h"
 
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_overlay_controller.h"
@@ -14,6 +14,7 @@ namespace rethread {
 // Hosts the primary browser view inside a top-level Views window.
 class MainWindowDelegate : public CefWindowDelegate {
  public:
+  explicit MainWindowDelegate(cef_show_state_t initial_state);
   MainWindowDelegate(CefRefPtr<CefBrowserView> browser_view,
                      cef_show_state_t initial_state);
 
@@ -27,8 +28,8 @@ class MainWindowDelegate : public CefWindowDelegate {
   cef_runtime_style_t GetWindowRuntimeStyle() override;
 
  private:
-  CefRefPtr<CefBrowserView> browser_view_;
   const cef_show_state_t initial_state_;
+  CefRefPtr<CefBrowserView> browser_view_;
   CefRefPtr<CefOverlayController> tab_overlay_;
   CefRefPtr<TabStripView> tab_strip_;
 

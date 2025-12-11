@@ -14,6 +14,7 @@
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
 
+#include "browser/tab_manager.h"
 #include "common/theme.h"
 
 namespace rethread {
@@ -125,6 +126,10 @@ void BrowserClient::OnTitleChange(CefRefPtr<CefBrowser> browser,
 
   if (options_.alloy_runtime) {
     PlatformTitleChange(browser, title);
+  }
+
+  if (auto* tab_manager = TabManager::Get()) {
+    tab_manager->UpdateBrowserTitle(browser, title.ToString());
   }
 }
 

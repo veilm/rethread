@@ -44,9 +44,12 @@ WRAP_LIB   := $(OUT)/libcef_dll/libcef_dll_wrapper.a
 APP_SRCS := \
 	src/main_linux.cc \
 	src/app/app.cc \
+	src/app/tab_cli.cc \
 	src/common/theme.cc \
 	src/common/debug_log.cc \
 	src/browser/tab_strip.cc \
+	src/browser/tab_manager.cc \
+	src/browser/tab_ipc_server.cc \
 	src/browser/client.cc \
 	src/browser/client_linux.cc \
 	src/browser/windowing.cc
