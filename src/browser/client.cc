@@ -328,6 +328,12 @@ bool BrowserClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
   if (event.type != KEYEVENT_RAWKEYDOWN) {
     return false;
   }
+  if ((event.modifiers & EVENTFLAG_IS_REPEAT) != 0) {
+    // Avoid launching the handler on every auto-repeat event; this was observed
+    // to stall scrolling/typing after long key presses, so we only intercept
+    // the initial press and let the page consume repeats directly.
+    return false;
+  }
   const bool handled = RunKeyHandler(event);
   if (handled && is_keyboard_shortcut) {
     *is_keyboard_shortcut = true;

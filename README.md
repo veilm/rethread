@@ -15,8 +15,8 @@ make -j$(nproc)
 ## key handler
 
 Rethread looks for an executable named `rethread-key-handler` on `PATH`. Every
-`KEYEVENT_RAWKEYDOWN` event launches that handler with CLI flags describing the
-key, for example:
+non-repeat `KEYEVENT_RAWKEYDOWN` event launches that handler with CLI flags
+describing the key, for example:
 
 ```
 rethread-key-handler key \
