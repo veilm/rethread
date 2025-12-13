@@ -6,6 +6,7 @@
 
 #include "include/cef_client.h"
 #include "include/cef_context_menu_handler.h"
+#include "include/cef_keyboard_handler.h"
 
 namespace rethread {
 
@@ -13,7 +14,8 @@ class BrowserClient : public CefClient,
                       public CefDisplayHandler,
                       public CefLifeSpanHandler,
                       public CefLoadHandler,
-                      public CefContextMenuHandler {
+                      public CefContextMenuHandler,
+                      public CefKeyboardHandler {
  public:
   struct Options {
     bool alloy_runtime = true;
@@ -31,6 +33,7 @@ class BrowserClient : public CefClient,
   CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() override {
     return this;
   }
+  CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
 
   void OnTitleChange(CefRefPtr<CefBrowser> browser,
                      const CefString& title) override;
@@ -47,6 +50,13 @@ class BrowserClient : public CefClient,
                            CefRefPtr<CefFrame> frame,
                            CefRefPtr<CefContextMenuParams> params,
                            CefRefPtr<CefMenuModel> model) override;
+  bool OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
+                     const CefKeyEvent& event,
+                     CefEventHandle os_event,
+                     bool* is_keyboard_shortcut) override;
+  bool OnKeyEvent(CefRefPtr<CefBrowser> browser,
+                  const CefKeyEvent& event,
+                  CefEventHandle os_event) override;
 
   void ShowMainWindow();
   void CloseAllBrowsers(bool force_close);

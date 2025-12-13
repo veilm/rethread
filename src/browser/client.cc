@@ -1,5 +1,6 @@
 #include "browser/client.h"
 
+#include <cctype>
 #include <cstdlib>
 #include <iomanip>
 #include <sstream>
@@ -9,6 +10,7 @@
 #include "include/base/cef_callback.h"
 #include "include/cef_app.h"
 #include "include/cef_parser.h"
+#include "include/internal/cef_types_wrappers.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_window.h"
 #include "include/wrapper/cef_closure_task.h"
@@ -99,6 +101,36 @@ void LaunchMenuCommand(const std::string& command,
   full_command << "\" | " << command << ") &";
 
   std::system(full_command.str().c_str());
+}
+
+bool MatchesKey(int key_code, char target) {
+  if (key_code <= 0) {
+    return false;
+  }
+  const unsigned char normalized = static_cast<unsigned char>(key_code);
+  return std::tolower(normalized) == target;
+}
+
+bool IsCtrlEShortcut(const CefKeyEvent& event) {
+  if ((event.modifiers & EVENTFLAG_CONTROL_DOWN) == 0) {
+    return false;
+  }
+  if (MatchesKey(event.windows_key_code, 'e')) {
+    return true;
+  }
+  if (MatchesKey(event.character, 'e')) {
+    return true;
+  }
+  if (MatchesKey(event.unmodified_character, 'e')) {
+    return true;
+  }
+  return false;
+}
+
+void ExecuteAlertCommand() {
+  constexpr char kAlertCommand[] = "alert hi &";
+  AppendDebugLog("Executing Ctrl+E keybinding: alert hi");
+  std::system(kAlertCommand);
 }
 }  // namespace
 
@@ -197,6 +229,30 @@ void BrowserClient::OnLoadError(CefRefPtr<CefBrowser> browser,
      << " (" << errorCode << ").</h2></body></html>";
 
   frame->LoadURL(BuildDataUri(ss.str(), "text/html"));
+}
+
+bool BrowserClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
+                                  const CefKeyEvent& event,
+                                  CefEventHandle os_event,
+                                  bool* is_keyboard_shortcut) {
+  CEF_REQUIRE_UI_THREAD();
+  if (event.type != KEYEVENT_RAWKEYDOWN) {
+    return false;
+  }
+  if (!IsCtrlEShortcut(event)) {
+    return false;
+  }
+  if (is_keyboard_shortcut) {
+    *is_keyboard_shortcut = true;
+  }
+  ExecuteAlertCommand();
+  return true;
+}
+
+bool BrowserClient::OnKeyEvent(CefRefPtr<CefBrowser> browser,
+                               const CefKeyEvent& event,
+                               CefEventHandle os_event) {
+  return false;
 }
 
 void BrowserClient::OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
