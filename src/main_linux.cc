@@ -163,22 +163,34 @@ CliOptions ParseCliOptions(int argc, char* argv[]) {
 }
 
 void PrintHelp() {
-  std::cout << "Usage: rethread [options]\n"
-               "\n"
-               "Options:\n"
-               "  --help, -h            Show this message and exit.\n"
-               "  --user-data-dir=PATH  Override the directory used for browser profile\n"
-               "                        data (defaults to $XDG_DATA_HOME/rethread or\n"
-               "                        $HOME/.local/share/rethread).\n"
-               "  --background-color=HEX\n"
-               "                        Default background color in #RRGGBB or\n"
-               "                        #AARRGGBB format.\n"
-               "  --url=URL             Initial page to load (defaults to\n"
-               "                        https://github.com/veilm/rethread).\n"
-               "  --debug-log=PATH      Append debug output to PATH.\n"
-               "  --auto-exit=SECONDS   Quit automatically after the given number of\n"
-               "                        seconds (best effort).\n"
-;
+  std::cout
+      << "Usage:\n"
+      << "  rethread [options]\n"
+      << "  rethread tabs [--user-data-dir=PATH] <command>\n"
+      << "\n"
+      << "Browser options:\n"
+      << "  --help, -h              Show this help and exit.\n"
+      << "  --user-data-dir=PATH    Override the profile directory (defaults to\n"
+      << "                          $XDG_DATA_HOME/rethread or\n"
+      << "                          $HOME/.local/share/rethread).\n"
+      << "  --background-color=HEX  Default background color in #RRGGBB or\n"
+      << "                          #AARRGGBB format.\n"
+      << "  --url=URL               Initial page to load (defaults to\n"
+      << "                          https://github.com/veilm/rethread).\n"
+      << "  --debug-log=PATH        Append debug output to PATH (e.g.\n"
+      << "                          /tmp/rethread-debug.log).\n"
+      << "  --auto-exit=SECONDS     Quit automatically after SECONDS (best effort,\n"
+      << "                          useful for automation).\n"
+      << "\n"
+      << "Tab/IPC commands:\n"
+      << "  rethread tabs list      Print the currently open tabs (alias: get).\n"
+      << "  rethread tabs switch <id>\n"
+      << "                          Focus the tab with numeric id <id>.\n"
+      << "  rethread tabs open <url>\n"
+      << "                          Open <url> in a new tab (remaining args are\n"
+      << "                          joined with spaces).\n"
+      << "  --user-data-dir works the same here to pick which profile/socket to\n"
+      << "  talk to if you have multiple instances.\n";
 }
 
 #if defined(CEF_X11)
