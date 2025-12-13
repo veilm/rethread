@@ -76,14 +76,42 @@ auto RunOnUiAndWait(Func&& func) -> decltype(func()) {
   return std::move(result_holder->value());
 }
 
-std::string EscapeTitle(const std::string& input) {
+std::string JsonEscape(const std::string& input) {
   std::string escaped;
   escaped.reserve(input.size());
-  for (char c : input) {
-    if (c == '"' || c == '\\') {
-      escaped.push_back('\\');
+  for (unsigned char c : input) {
+    switch (c) {
+      case '\"':
+        escaped.append("\\\"");
+        break;
+      case '\\':
+        escaped.append("\\\\");
+        break;
+      case '\b':
+        escaped.append("\\b");
+        break;
+      case '\f':
+        escaped.append("\\f");
+        break;
+      case '\n':
+        escaped.append("\\n");
+        break;
+      case '\r':
+        escaped.append("\\r");
+        break;
+      case '\t':
+        escaped.append("\\t");
+        break;
+      default:
+        if (c < 0x20) {
+          char buffer[7];
+          std::snprintf(buffer, sizeof(buffer), "\\u%04x", c);
+          escaped.append(buffer);
+        } else {
+          escaped.push_back(static_cast<char>(c));
+        }
+        break;
     }
-    escaped.push_back(c);
   }
   return escaped;
 }
@@ -398,12 +426,22 @@ std::string TabIpcServer::HandleCommand(const std::string& command) {
   if (op == "get" || op == "list") {
     auto tabs = RunOnUiAndWait([&]() { return TabManager::Get()->GetTabs(); });
     std::ostringstream out;
-    out << "OK\n";
-    for (const auto& tab : tabs) {
-      out << "id=" << tab.id << " active=" << (tab.active ? 1 : 0)
-          << " url=" << tab.url << " title=\""
-          << EscapeTitle(tab.title) << "\"\n";
+    out << "{\n  \"tabs\": [";
+    for (size_t i = 0; i < tabs.size(); ++i) {
+      const auto& tab = tabs[i];
+      if (i == 0) {
+        out << "\n";
+      }
+      out << "    {\"id\": " << tab.id << ", \"active\": "
+          << (tab.active ? "true" : "false") << ", \"url\": \""
+          << JsonEscape(tab.url) << "\", \"title\": \""
+          << JsonEscape(tab.title) << "\"}";
+      if (i + 1 < tabs.size()) {
+        out << ",";
+      }
+      out << "\n";
     }
+    out << "  ]\n}\n";
     return out.str();
   }
 

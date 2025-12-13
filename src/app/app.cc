@@ -19,7 +19,7 @@
 namespace rethread {
 namespace {
 constexpr char kUrlSwitch[] = "url";
-constexpr char kDefaultUrl[] = "https://github.com/veilm/rethread";
+constexpr char kDefaultUrl[] = "https://veilm.github.io/rethread/";
 
 std::string ResolveStartupUrl(const CefRefPtr<CefCommandLine>& command_line) {
   std::string url = command_line->GetSwitchValue(kUrlSwitch);
