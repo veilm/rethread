@@ -1,5 +1,8 @@
 #include "browser/tab_manager.h"
 
+#include <algorithm>
+#include <sstream>
+
 #include "include/base/cef_bind.h"
 #include "include/base/cef_callback.h"
 #include "include/views/cef_fill_layout.h"
@@ -8,6 +11,7 @@
 #include "include/wrapper/cef_helpers.h"
 
 #include "browser/tab_strip.h"
+#include "common/debug_log.h"
 
 namespace rethread {
 namespace {
@@ -271,6 +275,12 @@ void TabManager::UpdateTabStrip() const {
   if (!tab_strip_) {
     return;
   }
+  if (tab_strip_visible_) {
+    // When the overlay is already visible, force a bounds refresh here so CEF
+    // repaints immediately. Without this we observed updates only becoming
+    // visible after moving/resizing the window.
+    const_cast<TabManager*>(this)->RefreshTabOverlayBounds();
+  }
   std::vector<TabStripView::Tab> tabs;
   tabs.reserve(tabs_.size());
   for (const auto& tab : tabs_) {
@@ -280,10 +290,14 @@ void TabManager::UpdateTabStrip() const {
     tabs.push_back(entry);
   }
   tab_strip_->SetTabs(tabs);
+  LogTabStripContents(tabs);
 }
 
 void TabManager::ApplyTabStripVisibility() {
   bool visible = tab_strip_visible_;
+  if (visible && !tab_overlay_) {
+    AppendDebugLog("Tab strip requested to show but overlay is unavailable.");
+  }
   if (tab_overlay_) {
     tab_overlay_->SetVisible(visible);
   }
@@ -296,7 +310,14 @@ void TabManager::ApplyTabStripVisibility() {
 
 void TabManager::SetTabStripVisible(bool visible) {
   tab_strip_visible_ = visible;
+  if (visible) {
+    EnsureTabOverlay();
+    RefreshTabOverlayBounds();
+  }
   ApplyTabStripVisibility();
+  if (visible) {
+    UpdateTabStrip();
+  }
 }
 
 int TabManager::NextTabStripVisibilityToken() {
@@ -309,6 +330,53 @@ void TabManager::HandleTabStripFlashTimeout(int token) {
     return;
   }
   SetTabStripVisible(false);
+}
+
+void TabManager::LogTabStripContents(
+    const std::vector<TabStripView::Tab>& tabs) const {
+  std::ostringstream log;
+  log << "Tab strip update visible=" << (tab_strip_visible_ ? "1" : "0")
+      << " count=" << tabs.size();
+  for (size_t i = 0; i < tabs.size(); ++i) {
+    log << " [" << i << "]" << (tabs[i].active ? "*" : " ")
+        << tabs[i].title;
+  }
+  AppendDebugLog(log.str());
+}
+
+void TabManager::EnsureTabOverlay() {
+  if (tab_overlay_ || !window_ || !tab_strip_) {
+    return;
+  }
+  CefRefPtr<CefPanel> panel = tab_strip_->GetPanel();
+  if (!panel) {
+    AppendDebugLog("Tab strip overlay creation skipped: missing panel.");
+    return;
+  }
+  CefRefPtr<CefOverlayController> overlay =
+      window_->AddOverlayView(panel, CEF_DOCKING_MODE_CUSTOM, false);
+  if (!overlay) {
+    AppendDebugLog("Failed to create tab strip overlay controller.");
+    return;
+  }
+  tab_overlay_ = overlay;
+  tab_overlay_->SetVisible(tab_strip_visible_);
+  RefreshTabOverlayBounds();
+}
+
+void TabManager::RefreshTabOverlayBounds() {
+  if (!tab_overlay_ || !window_ || !tab_strip_) {
+    return;
+  }
+  CefRect bounds = window_->GetBounds();
+  CefSize preferred = tab_strip_->GetPreferredSize();
+  int width = preferred.width > 0 ? preferred.width : bounds.width;
+  int height = preferred.height > 0 ? preferred.height : bounds.height;
+  width = std::min(width, bounds.width);
+  height = std::min(height, bounds.height);
+  int x = (bounds.width - width) / 2;
+  int y = (bounds.height - height) / 2;
+  tab_overlay_->SetBounds(CefRect(x, y, width, height));
 }
 
 TabManager::TabEntry* TabManager::FindTabById(int id) {

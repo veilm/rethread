@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "browser/tab_strip.h"
+
 #include "include/base/cef_macros.h"
 #include "include/cef_browser.h"
 #include "include/cef_client.h"
@@ -16,8 +18,6 @@
 #include "include/views/cef_window.h"
 
 namespace rethread {
-
-class TabStripView;
 
 class TabManager {
  public:
@@ -80,6 +80,9 @@ class TabManager {
   void SetTabStripVisible(bool visible);
   int NextTabStripVisibilityToken();
   void HandleTabStripFlashTimeout(int token);
+  void EnsureTabOverlay();
+  void RefreshTabOverlayBounds();
+  void LogTabStripContents(const std::vector<TabStripView::Tab>& tabs) const;
 
   TabEntry* FindTabById(int id);
   const TabEntry* FindTabById(int id) const;
