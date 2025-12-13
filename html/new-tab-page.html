@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>rethread · new tab</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #050505;
+        --fg: #f5f5f5;
+        --muted: #8a8a8a;
+        --accent: #f8f8f8;
+        --border: #1a1a1a;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      main {
+        width: min(480px, 100%);
+        text-align: center;
+      }
+
+      .logo {
+        width: 96px;
+        height: 96px;
+        margin: 0 auto 12px;
+      }
+
+      h1 {
+        margin: 0 0 24px;
+        font-size: 1.75rem;
+        letter-spacing: 0.06em;
+        font-weight: 500;
+      }
+
+      .links {
+        display: flex;
+        justify-content: center;
+        gap: 16px;
+        margin-bottom: 32px;
+        font-size: 0.95rem;
+      }
+
+      .links a {
+        color: var(--muted);
+        text-decoration: none;
+        transition: color 120ms ease;
+      }
+
+      .links a:hover,
+      .links a:focus-visible {
+        color: var(--fg);
+      }
+
+      form {
+        display: flex;
+        gap: 10px;
+        background: #0b0b0b;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 6px;
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02);
+      }
+
+      input[type="text"] {
+        flex: 1;
+        border: none;
+        background: transparent;
+        color: var(--fg);
+        font-size: 1rem;
+        padding: 10px 14px;
+        outline: none;
+      }
+
+      button {
+        border: none;
+        border-radius: 999px;
+        padding: 10px 20px;
+        background: var(--accent);
+        color: #050505;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 120ms ease;
+      }
+
+      button:active {
+        opacity: 0.8;
+      }
+
+      @media (max-width: 480px) {
+        form {
+          flex-direction: column;
+          border-radius: 24px;
+        }
+
+        button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="assets/icon-loose-white.svg" alt="rethread icon" class="logo" width="96" height="96">
+      <h1>rethread</h1>
+      <div class="links">
+        <a href="https://github.com/veilm/rethread" target="_blank" rel="noreferrer noopener">GitHub</a>
+        <a href="https://x.com/sucralose__" target="_blank" rel="noreferrer noopener">X</a>
+      </div>
+      <form id="omnibox" autocomplete="off">
+        <input type="text" id="query" placeholder="Search or enter address" spellcheck="false" autofocus>
+        <button type="submit" id="action">Visit</button>
+      </form>
+    </main>
+    <script>
+      const form = document.getElementById('omnibox');
+      const input = document.getElementById('query');
+      const button = document.getElementById('action');
+
+      const isLikelyUrl = (value) => {
+        if (!value) return false;
+        const trimmed = value.trim();
+        if (!trimmed || /\s/.test(trimmed)) return false;
+        if (/^[a-z]+:\/\//i.test(trimmed)) return true;
+        if (trimmed.includes('.')) {
+          const host = trimmed.split('/')[0];
+          return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(host);
+        }
+        return false;
+      };
+
+      const computeTarget = (raw) => {
+        const text = raw.trim();
+        if (!text) return null;
+        if (isLikelyUrl(text)) {
+          return /^[a-z]+:\/\//i.test(text) ? text : `https://${text}`;
+        }
+        return `https://google.com/search?q=${encodeURIComponent(text)}`;
+      };
+
+      const updateButtonLabel = () => {
+        button.textContent = isLikelyUrl(input.value) ? 'Visit' : 'Search';
+      };
+
+      input.addEventListener('input', updateButtonLabel);
+
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const destination = computeTarget(input.value);
+        if (destination) {
+          window.location.href = destination;
+        }
+      });
+
+      updateButtonLabel();
+    </script>
+  </body>
+</html>
