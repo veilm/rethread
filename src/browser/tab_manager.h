@@ -11,6 +11,7 @@
 #include "include/cef_request_context.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_browser_view_delegate.h"
+#include "include/views/cef_overlay_controller.h"
 #include "include/views/cef_panel.h"
 #include "include/views/cef_window.h"
 
@@ -48,11 +49,17 @@ class TabManager {
 
   void AttachWindow(CefRefPtr<CefWindow> window);
   void DetachWindow(CefRefPtr<CefWindow> window);
-  void BindTabStrip(CefRefPtr<TabStripView> tab_strip);
+  void BindTabStrip(CefRefPtr<TabStripView> tab_strip,
+                    CefRefPtr<CefOverlayController> overlay);
   void UnbindTabStrip(CefRefPtr<TabStripView> tab_strip);
 
   void UpdateBrowserTitle(CefRefPtr<CefBrowser> browser,
                           const std::string& title);
+
+  void ShowTabStrip();
+  void HideTabStrip();
+  void ToggleTabStrip();
+  void ShowTabStripForDuration(int milliseconds);
 
  private:
   struct TabEntry {
@@ -69,6 +76,10 @@ class TabManager {
   void AttachTabView(TabEntry* tab);
   void ApplyActiveState();
   void UpdateTabStrip() const;
+  void ApplyTabStripVisibility();
+  void SetTabStripVisible(bool visible);
+  int NextTabStripVisibilityToken();
+  void HandleTabStripFlashTimeout(int token);
 
   TabEntry* FindTabById(int id);
   const TabEntry* FindTabById(int id) const;
@@ -83,6 +94,9 @@ class TabManager {
   CefRefPtr<CefWindow> window_;
   CefRefPtr<CefPanel> content_panel_;
   CefRefPtr<TabStripView> tab_strip_;
+  CefRefPtr<CefOverlayController> tab_overlay_;
+  bool tab_strip_visible_ = false;
+  int tab_strip_visibility_token_ = 0;
 
   std::vector<std::unique_ptr<TabEntry>> tabs_;
   int next_tab_id_ = 1;

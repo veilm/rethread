@@ -45,17 +45,17 @@ void MainWindowDelegate::OnWindowCreated(CefRefPtr<CefWindow> window) {
     if (tab_panel) {
       tab_panel->SetBackgroundColor(kTabBackgroundColor);
     }
-    if (auto* tab_manager = TabManager::Get()) {
-      tab_manager->BindTabStrip(tab_strip_);
-    }
     if (tab_panel) {
       tab_overlay_ =
           window->AddOverlayView(tab_panel, CEF_DOCKING_MODE_CUSTOM, false);
+      if (tab_overlay_) {
+        tab_overlay_->SetVisible(false);
+      }
+    }
+    if (auto* tab_manager = TabManager::Get()) {
+      tab_manager->BindTabStrip(tab_strip_, tab_overlay_);
     }
     UpdateTabOverlayBounds(window);
-    if (tab_overlay_) {
-      tab_overlay_->SetVisible(true);
-    }
   }
 }
 

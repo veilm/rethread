@@ -438,6 +438,46 @@ std::string TabIpcServer::HandleCommand(const std::string& command) {
     return out.str();
   }
 
+  if (op == "tabstrip") {
+    std::string action;
+    stream >> action;
+    if (action.empty()) {
+      return "ERR missing tabstrip action\n";
+    }
+
+    auto run_action = [&](auto&& fn) -> std::string {
+      bool success = RunOnUiAndWait([&]() {
+        fn();
+        return true;
+      });
+      if (!success) {
+        return "ERR failed to execute tabstrip action\n";
+      }
+      return "OK\n";
+    };
+
+    if (action == "show") {
+      return run_action([]() { TabManager::Get()->ShowTabStrip(); });
+    }
+    if (action == "hide") {
+      return run_action([]() { TabManager::Get()->HideTabStrip(); });
+    }
+    if (action == "toggle") {
+      return run_action([]() { TabManager::Get()->ToggleTabStrip(); });
+    }
+    if (action == "peek") {
+      int duration_ms = 0;
+      stream >> duration_ms;
+      if (duration_ms <= 0) {
+        return "ERR tabstrip peek requires duration in ms\n";
+      }
+      return run_action([duration_ms]() {
+        TabManager::Get()->ShowTabStripForDuration(duration_ms);
+      });
+    }
+    return "ERR unknown tabstrip action\n";
+  }
+
   return "ERR unknown command\n";
 }
 

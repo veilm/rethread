@@ -1,7 +1,10 @@
 #include "browser/tab_manager.h"
 
+#include "include/base/cef_bind.h"
+#include "include/base/cef_callback.h"
 #include "include/views/cef_fill_layout.h"
 #include "include/views/cef_window.h"
+#include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
 
 #include "browser/tab_strip.h"
@@ -166,9 +169,12 @@ void TabManager::DetachWindow(CefRefPtr<CefWindow> window) {
   }
 }
 
-void TabManager::BindTabStrip(CefRefPtr<TabStripView> tab_strip) {
+void TabManager::BindTabStrip(CefRefPtr<TabStripView> tab_strip,
+                              CefRefPtr<CefOverlayController> overlay) {
   CEF_REQUIRE_UI_THREAD();
   tab_strip_ = tab_strip;
+  tab_overlay_ = overlay;
+  ApplyTabStripVisibility();
   UpdateTabStrip();
 }
 
@@ -176,6 +182,7 @@ void TabManager::UnbindTabStrip(CefRefPtr<TabStripView> tab_strip) {
   CEF_REQUIRE_UI_THREAD();
   if (tab_strip_.get() == tab_strip.get()) {
     tab_strip_ = nullptr;
+    tab_overlay_ = nullptr;
   }
 }
 
@@ -188,6 +195,40 @@ void TabManager::UpdateBrowserTitle(CefRefPtr<CefBrowser> browser,
   }
   tab->title = title.empty() ? tab->url : title;
   UpdateTabStrip();
+}
+
+void TabManager::ShowTabStrip() {
+  CEF_REQUIRE_UI_THREAD();
+  NextTabStripVisibilityToken();
+  SetTabStripVisible(true);
+}
+
+void TabManager::HideTabStrip() {
+  CEF_REQUIRE_UI_THREAD();
+  NextTabStripVisibilityToken();
+  SetTabStripVisible(false);
+}
+
+void TabManager::ToggleTabStrip() {
+  CEF_REQUIRE_UI_THREAD();
+  NextTabStripVisibilityToken();
+  SetTabStripVisible(!tab_strip_visible_);
+}
+
+void TabManager::ShowTabStripForDuration(int milliseconds) {
+  CEF_REQUIRE_UI_THREAD();
+  const int delay = milliseconds < 0 ? 0 : milliseconds;
+  const int token = NextTabStripVisibilityToken();
+  SetTabStripVisible(true);
+  if (delay == 0) {
+    HandleTabStripFlashTimeout(token);
+    return;
+  }
+  CefPostDelayedTask(
+      TID_UI,
+      base::BindOnce(&TabManager::HandleTabStripFlashTimeout,
+                     base::Unretained(this), token),
+      delay);
 }
 
 void TabManager::EnsureContentPanel() {
@@ -239,6 +280,35 @@ void TabManager::UpdateTabStrip() const {
     tabs.push_back(entry);
   }
   tab_strip_->SetTabs(tabs);
+}
+
+void TabManager::ApplyTabStripVisibility() {
+  bool visible = tab_strip_visible_;
+  if (tab_overlay_) {
+    tab_overlay_->SetVisible(visible);
+  }
+  if (tab_strip_) {
+    if (auto panel = tab_strip_->GetPanel()) {
+      panel->SetVisible(visible);
+    }
+  }
+}
+
+void TabManager::SetTabStripVisible(bool visible) {
+  tab_strip_visible_ = visible;
+  ApplyTabStripVisibility();
+}
+
+int TabManager::NextTabStripVisibilityToken() {
+  return ++tab_strip_visibility_token_;
+}
+
+void TabManager::HandleTabStripFlashTimeout(int token) {
+  CEF_REQUIRE_UI_THREAD();
+  if (tab_strip_visibility_token_ != token) {
+    return;
+  }
+  SetTabStripVisible(false);
 }
 
 TabManager::TabEntry* TabManager::FindTabById(int id) {
