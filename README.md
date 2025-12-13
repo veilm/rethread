@@ -8,7 +8,14 @@ git clone --depth 1 https://github.com/veilm/rethread
 cd rethread
 
 python3 bootstrap.py # pulls a binary for the cef lib from Spotify yes
+
+# sandboxing setup, hopefully works
+sudo chown root:root $(find . -type f -name chrome-sandbox)
+sudo chmod 4755 $(find . -type f -name chrome-sandbox)
+
 make -j$(nproc)
+sudo cp tools/rethread_key_handler.py /usr/local/bin/rethread-key-handler
+
 ./out/Release/rethread --help
 ```
 
