@@ -19,7 +19,10 @@ void PrintTabUsage() {
                "Commands:\n"
                "  get|list              List open tabs.\n"
                "  switch <id>           Activate the tab with the given id.\n"
-               "  open <url>            Open a new tab with the URL.\n";
+               "  open <url>            Open a new tab with the URL.\n"
+               "  tabstrip show|hide|toggle\n"
+               "                        Control the tab strip overlay visibility.\n"
+               "  tabstrip peek <ms>    Show the tab strip briefly, then hide.\n";
 }
 
 bool ParseUserDataDir(int argc,
@@ -126,6 +129,24 @@ int RunTabCli(int argc, char* argv[], const std::string& default_user_data_dir) 
       payload << argv[i];
     }
     payload << "\n";
+  } else if (cmd == "tabstrip") {
+    if (index >= argc) {
+      std::cerr << "tabstrip requires an action\n";
+      return 1;
+    }
+    std::string action = argv[index++];
+    if (action == "show" || action == "hide" || action == "toggle") {
+      payload << "tabstrip " << action << "\n";
+    } else if (action == "peek") {
+      if (index >= argc) {
+        std::cerr << "tabstrip peek requires a duration in ms\n";
+        return 1;
+      }
+      payload << "tabstrip peek " << argv[index++] << "\n";
+    } else {
+      std::cerr << "Unknown tabstrip action: " << action << "\n";
+      return 1;
+    }
   } else {
     std::cerr << "Unknown tabs command: " << cmd << "\n";
     PrintTabUsage();

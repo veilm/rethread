@@ -40,3 +40,21 @@ Ctrl combinations (ASCII control codes 1-26) back to printable labels so
 wants to consume. Symlink or
 copy it somewhere on your `PATH` and customize it to run whichever commands you
 need.
+
+## tab strip overlay
+
+The tab strip overlay starts hidden. Use the CLI to control it at runtime:
+
+```
+# show / hide / toggle visibility
+rethread tabs tabstrip show
+rethread tabs tabstrip hide
+rethread tabs tabstrip toggle
+
+# briefly show it for 400ms, then auto-hide
+rethread tabs tabstrip peek 400
+```
+
+`peek` always shows the overlay immediately and schedules a hide after the given
+duration (milliseconds). Any manual show/hide/toggle commands cancel pending
+peek hides.
