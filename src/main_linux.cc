@@ -176,7 +176,7 @@ void PrintHelp() {
       << "  --background-color=HEX  Default background color in #RRGGBB or\n"
       << "                          #AARRGGBB format.\n"
       << "  --url=URL               Initial page to load (defaults to\n"
-      << "                          https://github.com/veilm/rethread).\n"
+      << "                          https://veilm.github.io/rethread/).\n"
       << "  --debug-log=PATH        Append debug output to PATH (e.g.\n"
       << "                          /tmp/rethread-debug.log).\n"
       << "  --auto-exit=SECONDS     Quit automatically after SECONDS (best effort,\n"

@@ -104,14 +104,14 @@ copy-resources:
 
 run: all
 	# Dev-only: --no-sandbox avoids SUID setup for chrome-sandbox
-	cd $(OUT) && ./rethread --url=https://github.com/veilm/rethread
+	cd $(OUT) && ./rethread --url=https://veilm.github.io/rethread/
 
 # Optional: run without copying by pointing to in-place resources
 run-dev: $(APP_BIN)
 	cd $(OUT) && ./rethread --no-sandbox \
 	  --resources-dir-path="$(CEF_RES_DIR)" \
 	  --locales-dir-path="$(CEF_LOCALES_DIR)" \
-	  --url=https://github.com/veilm/rethread
+	  --url=https://veilm.github.io/rethread/
 
 clean:
 	rm -rf $(OUT)
