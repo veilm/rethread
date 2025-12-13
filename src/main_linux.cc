@@ -283,10 +283,6 @@ int main(int argc, char* argv[]) {
   CefString(&settings.cache_path).FromString(cli_options.user_data_dir);
   settings.background_color = cli_options.background_color;
 
-#if !defined(CEF_USE_SANDBOX)
-  settings.no_sandbox = true;
-#endif
-
   RethreadApp::Options app_options;
   app_options.auto_exit_seconds = cli_options.auto_exit_seconds;
   app_options.tab_socket_path =
