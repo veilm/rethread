@@ -2,6 +2,7 @@
 
 #include <cerrno>
 #include <cstdio>
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -37,6 +38,11 @@ auto RunOnUiAndWait(Func&& func) -> decltype(func()) {
     return func();
   }
 
+  TabIpcServer* server = g_ipc_server;
+  if (server && server->IsStopping()) {
+    return ReturnType();
+  }
+
   std::function<ReturnType()> bound = std::forward<Func>(func);
   CefRefPtr<CefWaitableEvent> event =
       CefWaitableEvent::CreateWaitableEvent(false, false);
@@ -53,7 +59,20 @@ auto RunOnUiAndWait(Func&& func) -> decltype(func()) {
           },
           result_holder, event, bound));
 
-  event->Wait();
+  while (true) {
+    if (event->TimedWait(50)) {
+      break;
+    }
+    server = g_ipc_server;
+    if (server && server->IsStopping()) {
+      return ReturnType();
+    }
+  }
+
+  if (!result_holder->has_value()) {
+    return ReturnType();
+  }
+
   return std::move(result_holder->value());
 }
 
@@ -95,7 +114,7 @@ TabIpcServer::~TabIpcServer() {
 
 void TabIpcServer::Start(const std::string& socket_path) {
   std::lock_guard<std::mutex> lock(state_mutex_);
-  if (running_) {
+  if (running_.load(std::memory_order_acquire)) {
     return;
   }
   AppendDebugLog("TabIpcServer starting with socket " + socket_path);
@@ -133,20 +152,46 @@ void TabIpcServer::Start(const std::string& socket_path) {
     return;
   }
 
+  auto configure_pipe_end = [](int fd, bool make_non_blocking) {
+    if (fd < 0) {
+      return;
+    }
+    if (make_non_blocking) {
+      int flags = fcntl(fd, F_GETFL, 0);
+      if (flags >= 0 && !(flags & O_NONBLOCK)) {
+        if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0) {
+          LOG(WARNING) << "Failed to set O_NONBLOCK on wake pipe: "
+                       << std::strerror(errno);
+        }
+      }
+    }
+    int fd_flags = fcntl(fd, F_GETFD, 0);
+    if (fd_flags >= 0 && !(fd_flags & FD_CLOEXEC)) {
+      if (fcntl(fd, F_SETFD, fd_flags | FD_CLOEXEC) != 0) {
+        LOG(WARNING) << "Failed to set FD_CLOEXEC on wake pipe: "
+                     << std::strerror(errno);
+      }
+    }
+  };
+
+  configure_pipe_end(wake_pipe_[0], true);
+  configure_pipe_end(wake_pipe_[1], false);
+
   listen_fd_.store(listen_fd);
-  running_ = true;
-  stop_requested_ = false;
+  running_.store(true, std::memory_order_release);
+  stop_requested_.store(false, std::memory_order_release);
   thread_ = std::thread(&TabIpcServer::ThreadMain, this);
 }
 
 void TabIpcServer::Stop() {
   std::lock_guard<std::mutex> lock(state_mutex_);
-  if (!running_ || stop_requested_) {
+  if (!running_.load(std::memory_order_acquire) ||
+      stop_requested_.load(std::memory_order_acquire)) {
     return;
   }
   AppendDebugLog("TabIpcServer stopping");
-  stop_requested_ = true;
-  running_ = false;
+  stop_requested_.store(true, std::memory_order_release);
+  running_.store(false, std::memory_order_release);
   int fd = listen_fd_.exchange(-1);
   if (fd >= 0) {
     shutdown(fd, SHUT_RDWR);
@@ -158,7 +203,7 @@ void TabIpcServer::Stop() {
 void TabIpcServer::ThreadMain() {
   AppendDebugLog("TabIpcServer thread running");
   const int wake_fd = wake_pipe_[0];
-  while (running_) {
+  while (running_.load(std::memory_order_acquire)) {
     struct pollfd fds[2];
     int nfds = 0;
     const int listen_fd = listen_fd_.load();
@@ -176,7 +221,7 @@ void TabIpcServer::ThreadMain() {
       if (errno == EINTR) {
         continue;
       }
-      if (!running_) {
+      if (!running_.load(std::memory_order_acquire)) {
         break;
       }
       continue;
@@ -187,7 +232,19 @@ void TabIpcServer::ThreadMain() {
       if (fds[i].fd == wake_fd && (fds[i].revents & POLLIN)) {
         handled_event = true;
         char buf[32];
-        while (read(wake_fd, buf, sizeof(buf)) > 0) {
+        while (true) {
+          ssize_t drained = read(wake_fd, buf, sizeof(buf));
+          if (drained > 0) {
+            continue;
+          }
+          if (drained < 0 && errno == EINTR) {
+            continue;
+          }
+          if (drained <= 0 &&
+              (errno == EAGAIN || errno == EWOULDBLOCK || drained == 0)) {
+            break;
+          }
+          break;
         }
         continue;
       }
@@ -202,7 +259,7 @@ void TabIpcServer::ThreadMain() {
           if (errno == EINTR) {
             continue;
           }
-          if (!running_) {
+          if (!running_.load(std::memory_order_acquire)) {
             break;
           }
           continue;
@@ -214,7 +271,7 @@ void TabIpcServer::ThreadMain() {
       }
     }
 
-    if (!handled_event && !running_) {
+    if (!handled_event && !running_.load(std::memory_order_acquire)) {
       break;
     }
   }
@@ -236,8 +293,12 @@ void TabIpcServer::Join() {
     if (!socket_path_.empty()) {
       ::unlink(socket_path_.c_str());
     }
-    stop_requested_ = false;
+    stop_requested_.store(false, std::memory_order_release);
   }
+}
+
+bool TabIpcServer::IsStopping() const {
+  return stop_requested_.load(std::memory_order_acquire);
 }
 
 void TabIpcServer::NotifyWake() {
@@ -260,12 +321,61 @@ void TabIpcServer::CloseWakePipe() {
 }
 
 void TabIpcServer::HandleClient(int client_fd) {
+  int flags = fcntl(client_fd, F_GETFL, 0);
+  if (flags >= 0 && !(flags & O_NONBLOCK)) {
+    if (fcntl(client_fd, F_SETFL, flags | O_NONBLOCK) != 0) {
+      LOG(WARNING) << "Failed to set client socket non-blocking: "
+                   << std::strerror(errno);
+    }
+  }
+
   std::string buffer;
   char chunk[512];
-  ssize_t n = 0;
-  while ((n = read(client_fd, chunk, sizeof(chunk))) > 0) {
-    buffer.append(chunk, n);
-    if (buffer.find('\n') != std::string::npos) {
+  while (true) {
+    if (stop_requested_.load(std::memory_order_acquire)) {
+      AppendDebugLog("TabIpcServer aborting client read due to shutdown");
+      break;
+    }
+
+    ssize_t n = read(client_fd, chunk, sizeof(chunk));
+    if (n > 0) {
+      buffer.append(chunk, n);
+      if (buffer.find('\n') != std::string::npos) {
+        break;
+      }
+      continue;
+    }
+    if (n == 0) {
+      break;
+    }
+    if (n < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        struct pollfd pfd;
+        pfd.fd = client_fd;
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+        int rv = poll(&pfd, 1, 100);
+        if (rv <= 0) {
+          if (rv < 0 && errno == EINTR) {
+            continue;
+          }
+          if (rv == 0) {
+            continue;
+          }
+          break;
+        }
+        short error_bits = pfd.revents & (POLLERR | POLLHUP);
+#ifdef POLLRDHUP
+        error_bits |= (pfd.revents & POLLRDHUP);
+#endif
+        if (error_bits) {
+          break;
+        }
+        continue;
+      }
       break;
     }
   }

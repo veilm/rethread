@@ -15,6 +15,7 @@ class TabIpcServer {
   void Start(const std::string& socket_path);
   void Stop();
   void Join();
+  bool IsStopping() const;
 
  private:
   TabIpcServer();
@@ -30,7 +31,7 @@ class TabIpcServer {
   std::string socket_path_;
   std::thread thread_;
   std::atomic<bool> running_{false};
-  bool stop_requested_ = false;
+  std::atomic<bool> stop_requested_{false};
   int wake_pipe_[2] = {-1, -1};
   std::mutex state_mutex_;
 
