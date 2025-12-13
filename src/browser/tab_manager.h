@@ -43,6 +43,8 @@ class TabManager {
   bool ActivateTab(int id);
   std::vector<TabSnapshot> GetTabs() const;
   CefRefPtr<CefBrowser> GetActiveBrowser() const;
+  void CloseAllTabs(bool force_close);
+  CefRefPtr<CefWindow> GetWindow() const { return window_; }
 
   void AttachWindow(CefRefPtr<CefWindow> window);
   void DetachWindow(CefRefPtr<CefWindow> window);

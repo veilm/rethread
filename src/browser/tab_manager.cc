@@ -115,6 +115,20 @@ CefRefPtr<CefBrowser> TabManager::GetActiveBrowser() const {
   return nullptr;
 }
 
+void TabManager::CloseAllTabs(bool force_close) {
+  CEF_REQUIRE_UI_THREAD();
+  for (const auto& tab : tabs_) {
+    if (!tab->view) {
+      continue;
+    }
+    CefRefPtr<CefBrowser> browser = tab->view->GetBrowser();
+    if (!browser) {
+      continue;
+    }
+    browser->GetHost()->CloseBrowser(force_close);
+  }
+}
+
 void TabManager::AttachWindow(CefRefPtr<CefWindow> window) {
   CEF_REQUIRE_UI_THREAD();
   window_ = window;
@@ -130,8 +144,26 @@ void TabManager::DetachWindow(CefRefPtr<CefWindow> window) {
   if (window_.get() != window.get()) {
     return;
   }
+
+  std::vector<CefRefPtr<CefBrowser>> browsers_to_close;
+  browsers_to_close.reserve(tabs_.size());
+  for (const auto& tab : tabs_) {
+    if (!tab->view) {
+      continue;
+    }
+    CefRefPtr<CefBrowser> browser = tab->view->GetBrowser();
+    if (browser) {
+      browsers_to_close.push_back(browser);
+    }
+  }
+
   window_ = nullptr;
   content_panel_ = nullptr;
+  tabs_.clear();
+
+  for (auto& browser : browsers_to_close) {
+    browser->GetHost()->CloseBrowser(true);
+  }
 }
 
 void TabManager::BindTabStrip(CefRefPtr<TabStripView> tab_strip) {

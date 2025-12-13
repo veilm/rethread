@@ -18,6 +18,7 @@
 #endif
 
 #include "app/tab_cli.h"
+#include "browser/tab_ipc_server.h"
 #include "common/debug_log.h"
 #include "common/theme.h"
 #include "include/base/cef_logging.h"
@@ -219,6 +220,7 @@ void SuppressIbusWarnings() {
 }  // namespace
 
 using rethread::RethreadApp;
+using rethread::TabIpcServer;
 
 NO_STACK_PROTECTOR
 int main(int argc, char* argv[]) {
@@ -284,6 +286,8 @@ int main(int argc, char* argv[]) {
   }
 
   CefRunMessageLoop();
+  TabIpcServer::Get()->Stop();
+  TabIpcServer::Get()->Join();
   CefShutdown();
   return 0;
 }

@@ -10,6 +10,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <poll.h>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -23,6 +24,7 @@
 #include "include/wrapper/cef_helpers.h"
 
 #include "browser/tab_manager.h"
+#include "common/debug_log.h"
 
 namespace rethread {
 namespace {
@@ -88,15 +90,18 @@ TabIpcServer::TabIpcServer() = default;
 
 TabIpcServer::~TabIpcServer() {
   Stop();
+  Join();
 }
 
 void TabIpcServer::Start(const std::string& socket_path) {
+  std::lock_guard<std::mutex> lock(state_mutex_);
   if (running_) {
     return;
   }
+  AppendDebugLog("TabIpcServer starting with socket " + socket_path);
   socket_path_ = socket_path;
-  listen_fd_ = socket(AF_UNIX, SOCK_STREAM, 0);
-  if (listen_fd_ < 0) {
+  int listen_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (listen_fd < 0) {
     LOG(ERROR) << "Failed to create IPC socket: " << std::strerror(errno);
     return;
   }
@@ -109,50 +114,65 @@ void TabIpcServer::Start(const std::string& socket_path) {
   std::snprintf(addr.sun_path, sizeof(addr.sun_path), "%s",
                 socket_path_.c_str());
 
-  if (bind(listen_fd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) <
-      0) {
+  if (bind(listen_fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
     LOG(ERROR) << "Failed to bind IPC socket: " << std::strerror(errno);
-    close(listen_fd_);
-    listen_fd_ = -1;
+    close(listen_fd);
     return;
   }
 
-  if (listen(listen_fd_, 5) < 0) {
+  if (listen(listen_fd, 5) < 0) {
     LOG(ERROR) << "Failed to listen on IPC socket: " << std::strerror(errno);
-    close(listen_fd_);
-    listen_fd_ = -1;
+    close(listen_fd);
     return;
   }
 
+  if (pipe(wake_pipe_) != 0) {
+    LOG(ERROR) << "Failed to create IPC wake pipe: " << std::strerror(errno);
+    close(listen_fd);
+    listen_fd = -1;
+    return;
+  }
+
+  listen_fd_.store(listen_fd);
   running_ = true;
+  stop_requested_ = false;
   thread_ = std::thread(&TabIpcServer::ThreadMain, this);
 }
 
 void TabIpcServer::Stop() {
-  if (!running_) {
+  std::lock_guard<std::mutex> lock(state_mutex_);
+  if (!running_ || stop_requested_) {
     return;
   }
+  AppendDebugLog("TabIpcServer stopping");
+  stop_requested_ = true;
   running_ = false;
-  if (listen_fd_ >= 0) {
-    close(listen_fd_);
-    listen_fd_ = -1;
+  int fd = listen_fd_.exchange(-1);
+  if (fd >= 0) {
+    shutdown(fd, SHUT_RDWR);
+    close(fd);
   }
-  if (thread_.joinable()) {
-    thread_.join();
-  }
-  if (!socket_path_.empty()) {
-    ::unlink(socket_path_.c_str());
-  }
+  NotifyWake();
 }
 
 void TabIpcServer::ThreadMain() {
+  AppendDebugLog("TabIpcServer thread running");
+  const int wake_fd = wake_pipe_[0];
   while (running_) {
-    sockaddr_un client_addr;
-    socklen_t client_len = sizeof(client_addr);
-    int client_fd =
-        accept(listen_fd_, reinterpret_cast<sockaddr*>(&client_addr),
-               &client_len);
-    if (client_fd < 0) {
+    struct pollfd fds[2];
+    int nfds = 0;
+    const int listen_fd = listen_fd_.load();
+    if (listen_fd >= 0) {
+      fds[nfds++] = {listen_fd, POLLIN, 0};
+    }
+    if (wake_fd >= 0) {
+      fds[nfds++] = {wake_fd, POLLIN, 0};
+    }
+    if (nfds == 0) {
+      break;
+    }
+    int rv = poll(fds, nfds, -1);
+    if (rv < 0) {
       if (errno == EINTR) {
         continue;
       }
@@ -161,8 +181,81 @@ void TabIpcServer::ThreadMain() {
       }
       continue;
     }
-    HandleClient(client_fd);
-    close(client_fd);
+
+    bool handled_event = false;
+    for (int i = 0; i < nfds; ++i) {
+      if (fds[i].fd == wake_fd && (fds[i].revents & POLLIN)) {
+        handled_event = true;
+        char buf[32];
+        while (read(wake_fd, buf, sizeof(buf)) > 0) {
+        }
+        continue;
+      }
+      if (fds[i].fd == listen_fd &&
+          (fds[i].revents & (POLLIN | POLLERR | POLLHUP))) {
+        sockaddr_un client_addr;
+        socklen_t client_len = sizeof(client_addr);
+        int client_fd =
+            accept(listen_fd, reinterpret_cast<sockaddr*>(&client_addr),
+                   &client_len);
+        if (client_fd < 0) {
+          if (errno == EINTR) {
+            continue;
+          }
+          if (!running_) {
+            break;
+          }
+          continue;
+        }
+        handled_event = true;
+        AppendDebugLog("TabIpcServer accepted client");
+        HandleClient(client_fd);
+        close(client_fd);
+      }
+    }
+
+    if (!handled_event && !running_) {
+      break;
+    }
+  }
+  AppendDebugLog("TabIpcServer thread exiting");
+}
+
+void TabIpcServer::Join() {
+  std::thread worker;
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    worker = std::move(thread_);
+  }
+  if (worker.joinable()) {
+    worker.join();
+  }
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    CloseWakePipe();
+    if (!socket_path_.empty()) {
+      ::unlink(socket_path_.c_str());
+    }
+    stop_requested_ = false;
+  }
+}
+
+void TabIpcServer::NotifyWake() {
+  if (wake_pipe_[1] < 0) {
+    return;
+  }
+  const char byte = 1;
+  (void)write(wake_pipe_[1], &byte, 1);
+}
+
+void TabIpcServer::CloseWakePipe() {
+  if (wake_pipe_[0] >= 0) {
+    close(wake_pipe_[0]);
+    wake_pipe_[0] = -1;
+  }
+  if (wake_pipe_[1] >= 0) {
+    close(wake_pipe_[1]);
+    wake_pipe_[1] = -1;
   }
 }
 

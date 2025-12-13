@@ -4,7 +4,9 @@
 
 #include "include/cef_browser.h"
 
+#include "browser/client.h"
 #include "browser/tab_manager.h"
+#include "common/debug_log.h"
 #include "common/theme.h"
 
 namespace rethread {
@@ -23,7 +25,7 @@ MainWindowDelegate::MainWindowDelegate(cef_show_state_t initial_state)
 
 MainWindowDelegate::MainWindowDelegate(CefRefPtr<CefBrowserView> browser_view,
                                        cef_show_state_t initial_state)
-    : browser_view_(browser_view), initial_state_(initial_state) {}
+    : initial_state_(initial_state), browser_view_(browser_view) {}
 
 void MainWindowDelegate::OnWindowCreated(CefRefPtr<CefWindow> window) {
   window->SetBackgroundColor(GetDefaultBackgroundColor());
@@ -64,6 +66,7 @@ void MainWindowDelegate::OnWindowBoundsChanged(CefRefPtr<CefWindow> window,
 
 void MainWindowDelegate::OnWindowDestroyed(CefRefPtr<CefWindow> window) {
   if (!browser_view_) {
+    AppendDebugLog("Main window destroyed; tearing down tabs.");
     if (auto* tab_manager = TabManager::Get()) {
       tab_manager->UnbindTabStrip(tab_strip_);
       tab_manager->DetachWindow(window);
@@ -75,6 +78,8 @@ void MainWindowDelegate::OnWindowDestroyed(CefRefPtr<CefWindow> window) {
 }
 
 bool MainWindowDelegate::CanClose(CefRefPtr<CefWindow> window) {
+  AppendDebugLog("MainWindowDelegate::CanClose invoked, view=" +
+                 std::string(browser_view_ ? "browser_view" : "tab_window"));
   if (browser_view_) {
     CefRefPtr<CefBrowser> browser = browser_view_->GetBrowser();
     if (!browser) {
@@ -82,12 +87,21 @@ bool MainWindowDelegate::CanClose(CefRefPtr<CefWindow> window) {
     }
     return browser->GetHost()->TryCloseBrowser();
   }
-  if (auto* tab_manager = TabManager::Get()) {
-    CefRefPtr<CefBrowser> browser = tab_manager->GetActiveBrowser();
-    if (browser) {
-      return browser->GetHost()->TryCloseBrowser();
+
+  if (auto* client = BrowserClient::Get()) {
+    AppendDebugLog("BrowserClient::is_closing=" +
+                   std::string(client->is_closing() ? "true" : "false"));
+    if (client->is_closing()) {
+      return true;
     }
+    if (window) {
+      window->Hide();
+    }
+    AppendDebugLog("Requesting BrowserClient::CloseAllBrowsers");
+    client->CloseAllBrowsers(false);
+    return false;
   }
+  AppendDebugLog("BrowserClient not available during CanClose.");
   return true;
 }
 

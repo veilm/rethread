@@ -14,7 +14,9 @@
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
 
+#include "browser/tab_ipc_server.h"
 #include "browser/tab_manager.h"
+#include "common/debug_log.h"
 #include "common/theme.h"
 
 namespace rethread {
@@ -140,11 +142,6 @@ void BrowserClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
 
 bool BrowserClient::DoClose(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
-
-  if (browser_list_.size() == 1u) {
-    is_closing_ = true;
-  }
-
   return false;
 }
 
@@ -158,7 +155,16 @@ void BrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
     }
   }
 
+  AppendDebugLog("Browser closing; remaining=" +
+                 std::to_string(browser_list_.size()));
   if (browser_list_.empty()) {
+    if (auto* tab_manager = TabManager::Get()) {
+      if (auto window = tab_manager->GetWindow()) {
+        window->Close();
+      }
+    }
+    TabIpcServer::Get()->Stop();
+    AppendDebugLog("No browsers remain; quitting message loop.");
     CefQuitMessageLoop();
   }
 }
@@ -231,6 +237,7 @@ void BrowserClient::ShowMainWindow() {
 }
 
 void BrowserClient::CloseAllBrowsers(bool force_close) {
+  is_closing_ = true;
   if (!CefCurrentlyOn(TID_UI)) {
     CefPostTask(TID_UI, base::BindOnce(&BrowserClient::CloseAllBrowsers, this,
                                        force_close));
@@ -241,6 +248,9 @@ void BrowserClient::CloseAllBrowsers(bool force_close) {
     return;
   }
 
+  AppendDebugLog(std::string("CloseAllBrowsers called, count=") +
+                 std::to_string(browser_list_.size()) +
+                 (force_close ? " (force)" : ""));
   BrowserList browsers_to_close = browser_list_;
   for (const auto& browser : browsers_to_close) {
     browser->GetHost()->CloseBrowser(force_close);
