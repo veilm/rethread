@@ -51,20 +51,30 @@
       .links {
         display: flex;
         justify-content: center;
-        gap: 16px;
+        align-items: center;
+        gap: 18px;
         margin-bottom: 32px;
-        font-size: 0.95rem;
       }
 
       .links a {
-        color: var(--muted);
-        text-decoration: none;
-        transition: color 120ms ease;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        border: 1px solid var(--border);
+        transition: border-color 120ms ease;
       }
 
       .links a:hover,
       .links a:focus-visible {
-        color: var(--fg);
+        border-color: var(--fg);
+      }
+
+      .link-icon {
+        width: 20px;
+        height: 20px;
       }
 
       form {
@@ -120,8 +130,12 @@
       <img src="assets/icon-loose-white.svg" alt="rethread icon" class="logo" width="96" height="96">
       <h1>rethread</h1>
       <div class="links">
-        <a href="https://github.com/veilm/rethread" target="_blank" rel="noreferrer noopener">GitHub</a>
-        <a href="https://x.com/sucralose__" target="_blank" rel="noreferrer noopener">X</a>
+        <a href="https://github.com/veilm/rethread" target="_blank" rel="noreferrer noopener">
+          <img src="assets/github.svg" alt="GitHub" class="link-icon" width="20" height="20">
+        </a>
+        <a href="https://x.com/sucralose__" target="_blank" rel="noreferrer noopener">
+          <img src="assets/x.svg" alt="X" class="link-icon" width="20" height="20">
+        </a>
       </div>
       <form id="omnibox" autocomplete="off">
         <input type="text" id="query" placeholder="Search or enter address" spellcheck="false" autofocus>
