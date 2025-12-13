@@ -1,0 +1,2 @@
+#!/bin/sh
+echo "<key-handler>$@</key-handler>" >> ~/rethread.txt
