@@ -71,9 +71,15 @@ $(OUT)/app/%.o: src/%.cc
 	@mkdir -p $(dir $@)
 	$(CXX) $(APP_CXXFLAGS) -c $< -o $@
 
-$(APP_BIN): $(WRAP_LIB) $(APP_OBJS)
+$(APP_BIN): stop-rethread $(WRAP_LIB) $(APP_OBJS)
 	@mkdir -p $(dir $@)
 	$(CXX) -o $@ $(APP_OBJS) $(WRAP_LIB) $(LDFLAGS)
+
+.PHONY: stop-rethread
+# Kill any stale dev instance so the linker doesn't trigger a core dump while overwriting the binary
+stop-rethread:
+	@echo "Stopping running rethread instances (if any)..."
+	- pkill -x rethread >/dev/null 2>&1 || true
 
 copy-resources:
 	# Put runtime files next to the binary
