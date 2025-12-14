@@ -65,3 +65,23 @@ rethread tabs cycle -1 && rethread tabstrip peek 750
 `peek` always shows the overlay immediately and schedules a hide after the given
 duration (milliseconds). Any manual show/hide/toggle commands cancel pending
 peek hides.
+
+## evaluating JavaScript
+
+Use `rethread eval` to run JavaScript inside a tab without leaving the terminal.
+By default the active tab receives the snippet:
+
+```
+rethread eval "window.location.href"
+```
+
+Read scripts from stdin with `--stdin` (handy for multi-line snippets) and
+target specific tabs with either an id or 1-based index:
+
+```
+cat snippet.js | rethread eval --stdin --tab-index=2
+rethread eval --tab-id=7 "({title: document.title, url: location.href})"
+```
+
+The command prints the JSON-encoded return value (strings stay quoted, objects
+and arrays render as expected). Errors bubble up as `ERR ...` lines.

@@ -20,6 +20,12 @@ class TabIpcServer;
 class TabManager;
 class TabStripController;
 
+enum class ColorScheme {
+  kAuto,
+  kLight,
+  kDark,
+};
+
 struct BrowserOptions {
   QString user_data_dir;
   QString initial_url;
@@ -29,6 +35,7 @@ struct BrowserOptions {
   QString menu_command = QStringLiteral("menu x");
   QColor background_color = QColor(0x33, 0x33, 0x33);
   int auto_exit_seconds = 0;
+  ColorScheme color_scheme = ColorScheme::kDark;
 };
 
 class BrowserApplication : public QObject {

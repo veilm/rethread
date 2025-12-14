@@ -6,6 +6,11 @@
 
 #include <QApplication>
 #include <QColor>
+#include <QGuiApplication>
+#include <QPalette>
+#include <QStyle>
+#include <QStyleHints>
+#include <QString>
 
 #include "app/tab_cli.h"
 #include "app/user_dirs.h"
@@ -17,6 +22,7 @@ struct CliOptions {
   bool show_help = false;
   std::string user_data_dir;
   std::string debug_log_path;
+  std::string color_scheme = "dark";
   std::string initial_url = "https://veilm.github.io/rethread/";
   std::string startup_script_path;
   int auto_exit_seconds = 0;
@@ -139,6 +145,16 @@ CliOptions ParseCliOptions(int argc, char* argv[]) {
       options.startup_script_path = argv[++i];
       continue;
     }
+
+    const std::string scheme_prefix = "--color-scheme=";
+    if (arg.rfind(scheme_prefix, 0) == 0) {
+      options.color_scheme = arg.substr(scheme_prefix.size());
+      continue;
+    }
+    if (arg == "--color-scheme" && i + 1 < argc) {
+      options.color_scheme = argv[++i];
+      continue;
+    }
   }
   return options;
 }
@@ -159,7 +175,8 @@ void PrintHelp() {
       << "  --debug-log=PATH        Append debug output to PATH.\n"
       << "  --auto-exit=SECONDS     Quit automatically after SECONDS.\n"
       << "  --startup-script=PATH   Run PATH after launch (defaults to\n"
-      << "                          $XDG_CONFIG_HOME/rethread/startup.sh).\n";
+      << "                          $XDG_CONFIG_HOME/rethread/startup.sh).\n"
+      << "  --color-scheme=SCHEME   Force auto, light, or dark (default: dark).\n";
 }
 
 QColor ColorFromRgba(uint32_t rgba) {
@@ -167,15 +184,93 @@ QColor ColorFromRgba(uint32_t rgba) {
                          rgba & 0xFF, (rgba >> 24) & 0xFF);
 }
 
+rethread::ColorScheme ParseColorSchemeFlag(const std::string& value) {
+  std::string lowered;
+  lowered.reserve(value.size());
+  for (char c : value) {
+    lowered.push_back(static_cast<char>(
+        std::tolower(static_cast<unsigned char>(c))));
+  }
+  if (lowered == "auto") {
+    return rethread::ColorScheme::kAuto;
+  }
+  if (lowered == "light") {
+    return rethread::ColorScheme::kLight;
+  }
+  if (lowered != "dark") {
+    std::cerr << "Unknown color scheme '" << value
+              << "', defaulting to dark.\n";
+  }
+  return rethread::ColorScheme::kDark;
+}
+
+void ApplyChromiumColorPreference(rethread::ColorScheme scheme) {
+  QString flag;
+  switch (scheme) {
+    case rethread::ColorScheme::kLight:
+      flag = QStringLiteral("0");
+      break;
+    case rethread::ColorScheme::kDark:
+      flag = QStringLiteral("1");
+      break;
+    case rethread::ColorScheme::kAuto:
+      flag = QStringLiteral("2");
+      break;
+  }
+  QString existing = QString::fromUtf8(qgetenv("QTWEBENGINE_CHROMIUM_FLAGS"));
+  if (!existing.isEmpty() && !existing.endsWith(' ')) {
+    existing.append(' ');
+  }
+  existing.append(
+      QStringLiteral("--blink-settings=preferredColorScheme=%1").arg(flag));
+  qputenv("QTWEBENGINE_CHROMIUM_FLAGS", existing.toUtf8());
+}
+
+void ApplyQtPalette(QApplication& app, rethread::ColorScheme scheme) {
+  if (auto* hints = QGuiApplication::styleHints()) {
+    switch (scheme) {
+      case rethread::ColorScheme::kLight:
+        hints->setColorScheme(Qt::ColorScheme::Light);
+        break;
+      case rethread::ColorScheme::kDark:
+        hints->setColorScheme(Qt::ColorScheme::Dark);
+        break;
+      case rethread::ColorScheme::kAuto:
+        hints->unsetColorScheme();
+        break;
+    }
+  }
+
+  if (scheme != rethread::ColorScheme::kDark) {
+    app.setPalette(app.style()->standardPalette());
+    return;
+  }
+  QPalette palette;
+  palette.setColor(QPalette::Window, QColor(18, 18, 18));
+  palette.setColor(QPalette::WindowText, Qt::white);
+  palette.setColor(QPalette::Base, QColor(25, 25, 25));
+  palette.setColor(QPalette::AlternateBase, QColor(35, 35, 35));
+  palette.setColor(QPalette::Text, Qt::white);
+  palette.setColor(QPalette::Button, QColor(35, 35, 35));
+  palette.setColor(QPalette::ButtonText, Qt::white);
+  palette.setColor(QPalette::Highlight, QColor(45, 140, 240));
+  palette.setColor(QPalette::HighlightedText, Qt::black);
+  app.setPalette(palette);
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
-  QApplication app(argc, argv);
   CliOptions cli = ParseCliOptions(argc, argv);
   if (cli.show_help) {
     PrintHelp();
     return 0;
   }
+
+  rethread::ColorScheme scheme = ParseColorSchemeFlag(cli.color_scheme);
+  ApplyChromiumColorPreference(scheme);
+  QApplication app(argc, argv);
+  ApplyQtPalette(app, scheme);
 
   rethread::BrowserOptions options;
   options.user_data_dir = QString::fromStdString(cli.user_data_dir);
@@ -186,6 +281,7 @@ int main(int argc, char* argv[]) {
       QString::fromStdString(rethread::TabSocketPath(cli.user_data_dir));
   options.auto_exit_seconds = cli.auto_exit_seconds;
   options.background_color = ColorFromRgba(cli.background_color);
+  options.color_scheme = scheme;
 
   rethread::BrowserApplication browser(options);
   if (!browser.Initialize()) {

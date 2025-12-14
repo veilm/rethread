@@ -26,6 +26,7 @@ class CommandDispatcher {
   QString HandleBind(const QString& args) const;
   QString HandleUnbind(const QString& args) const;
   QString HandleTabStrip(const QString& args) const;
+  QString HandleEval(const QString& args) const;
 
   TabManager* tab_manager_;
   KeyBindingManager* key_binding_manager_;

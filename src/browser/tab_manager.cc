@@ -3,10 +3,15 @@
 #include <algorithm>
 
 #include <QCoreApplication>
+#include <QEventLoop>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QSizePolicy>
 #include <QStackedWidget>
 #include <QUrl>
 #include <QWebEngineProfile>
+#include <QWebEnginePage>
+#include <QWebEngineScript>
 #include <QWebEngineView>
 
 #include "browser/web_page.h"
@@ -16,6 +21,17 @@ namespace rethread {
 namespace {
 QString TabTitleOrUrl(const QString& title, const QString& url) {
   return title.isEmpty() ? url : title;
+}
+
+QString QuoteForJsString(const QString& text) {
+  QJsonArray wrapper;
+  wrapper.append(text);
+  QJsonDocument doc(wrapper);
+  const QByteArray raw = doc.toJson(QJsonDocument::Compact);
+  if (raw.size() >= 2 && raw.front() == '[' && raw.back() == ']') {
+    return QString::fromUtf8(raw.mid(1, raw.size() - 2));
+  }
+  return QStringLiteral("\"\"");
 }
 }  // namespace
 
@@ -272,6 +288,96 @@ void TabManager::notifyTabsChanged() {
 
 int TabManager::nextTabId() {
   return next_tab_id_++;
+}
+
+bool TabManager::EvaluateJavaScript(const QString& script,
+                                    int tab_id,
+                                    int tab_index,
+                                    QVariant* result,
+                                    QString* error_message) const {
+  if (tabs_.empty()) {
+    if (error_message) {
+      *error_message = QStringLiteral("no tabs available");
+    }
+    return false;
+  }
+  const TabEntry* target = nullptr;
+  if (tab_id > 0) {
+    target = findById(tab_id);
+    if (!target) {
+      if (error_message) {
+        *error_message = QStringLiteral("unknown tab id");
+      }
+      return false;
+    }
+  } else if (tab_index > 0) {
+    const int zero_based = tab_index - 1;
+    if (zero_based < 0 ||
+        zero_based >= static_cast<int>(tabs_.size())) {
+      if (error_message) {
+        *error_message = QStringLiteral("tab index out of range");
+      }
+      return false;
+    }
+    target = tabs_[static_cast<size_t>(zero_based)].get();
+  } else {
+    for (const auto& tab : tabs_) {
+      if (tab->active) {
+        target = tab.get();
+        break;
+      }
+    }
+    if (!target) {
+      target = tabs_.front().get();
+    }
+  }
+
+  if (!target || !target->view || !target->view->page()) {
+    if (error_message) {
+      *error_message = QStringLiteral("tab has no page");
+    }
+    return false;
+  }
+
+  QEventLoop loop;
+  QVariant callback_result;
+  bool callback_invoked = false;
+  const QString wrapper = QStringLiteral(
+      "(function(){"
+      "  try {"
+      "    return (0, eval)(%1);"
+      "  } catch (error) {"
+      "    return {__rethreadEvalError:true,"
+      "            message:String(error && error.message ? error.message : error)};"
+      "  }"
+      "})()")
+                              .arg(QuoteForJsString(script));
+
+  target->view->page()->runJavaScript(
+      wrapper, [&loop, &callback_result, &callback_invoked](const QVariant& value) {
+        callback_invoked = true;
+        callback_result = value;
+        loop.quit();
+      });
+  loop.exec();
+  if (result) {
+    *result = callback_result;
+  }
+  if (callback_result.canConvert<QVariantMap>()) {
+    const QVariantMap map = callback_result.toMap();
+    if (map.value(QStringLiteral("__rethreadEvalError")) == true) {
+      if (error_message) {
+        *error_message = map.value(QStringLiteral("message"))
+                             .toString()
+                             .trimmed();
+      }
+      return false;
+    }
+  }
+  if (!callback_invoked && error_message) {
+    *error_message = QStringLiteral("script did not produce a result");
+  }
+  return callback_invoked;
 }
 
 bool TabManager::closeById(int id) {

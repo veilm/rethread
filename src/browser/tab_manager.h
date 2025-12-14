@@ -9,6 +9,7 @@
 #include <QUrl>
 #include <QString>
 #include <QVector>
+#include <QVariant>
 
 class QStackedWidget;
 class QWebEngineProfile;
@@ -44,6 +45,11 @@ class TabManager : public QObject {
   bool closeTabAtIndex(int index);
   bool closeActiveTab();
   void closeAllTabs();
+  bool EvaluateJavaScript(const QString& script,
+                          int tab_id,
+                          int tab_index,
+                          QVariant* result,
+                          QString* error_message) const;
 
   QWebEngineView* activeView() const;
   QWebEngineProfile* profile() const { return profile_; }

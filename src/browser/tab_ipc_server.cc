@@ -71,8 +71,7 @@ void TabIpcServer::HandleSocket(QLocalSocket* socket) {
       return;
     }
     *finished = true;
-    const QString command =
-        QString::fromUtf8(*buffer).trimmed();
+    const QString command = QString::fromUtf8(*buffer).trimmed();
     QString response = dispatcher_ ? dispatcher_->Execute(command) : QString();
     if (!response.isEmpty()) {
       socket->write(response.toUtf8());
