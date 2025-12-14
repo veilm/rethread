@@ -8,6 +8,7 @@
 #include <QColor>
 #include <QGuiApplication>
 #include <QPalette>
+#include <QRegularExpression>
 #include <QStyle>
 #include <QStyleHints>
 #include <QString>
@@ -204,26 +205,81 @@ rethread::ColorScheme ParseColorSchemeFlag(const std::string& value) {
   return rethread::ColorScheme::kDark;
 }
 
+QStringList SplitChromiumFlags(const QString& flags) {
+  return flags.split(QRegularExpression(QStringLiteral("\\s+")),
+                     Qt::SkipEmptyParts);
+}
+
+QString ComposeChromiumFlags(const QStringList& flag_list) {
+  return flag_list.join(QLatin1Char(' '));
+}
+
+QMap<QString, QString> ParseBlinkSettings(const QStringList& values) {
+  QMap<QString, QString> map;
+  for (const QString& entry : values) {
+    const int idx = entry.indexOf('=');
+    if (idx <= 0) {
+      map.insert(entry.trimmed(), QString());
+      continue;
+    }
+    const QString key = entry.left(idx).trimmed();
+    const QString value = entry.mid(idx + 1).trimmed();
+    map.insert(key, value);
+  }
+  return map;
+}
+
+QString ComposeBlinkSettings(const QMap<QString, QString>& settings) {
+  QStringList parts;
+  parts.reserve(settings.size());
+  for (auto it = settings.cbegin(); it != settings.cend(); ++it) {
+    if (it.value().isEmpty()) {
+      parts << it.key();
+    } else {
+      parts << QStringLiteral("%1=%2").arg(it.key(), it.value());
+    }
+  }
+  return parts.join(QLatin1Char(','));
+}
+
 void ApplyChromiumColorPreference(rethread::ColorScheme scheme) {
-  QString flag;
+  const QByteArray env = qgetenv("QTWEBENGINE_CHROMIUM_FLAGS");
+  QStringList flags = SplitChromiumFlags(QString::fromUtf8(env));
+  QStringList blink_entries;
+  QStringList other_flags;
+  const QString blink_prefix = QStringLiteral("--blink-settings=");
+  for (const QString& flag : flags) {
+    if (flag.startsWith(blink_prefix)) {
+      const QString payload = flag.mid(blink_prefix.size());
+      if (!payload.isEmpty()) {
+        blink_entries << payload.split(QLatin1Char(','), Qt::SkipEmptyParts);
+      }
+    } else {
+      other_flags << flag;
+    }
+  }
+
+  QMap<QString, QString> settings = ParseBlinkSettings(blink_entries);
   switch (scheme) {
     case rethread::ColorScheme::kLight:
-      flag = QStringLiteral("0");
+      settings.insert(QStringLiteral("preferredColorScheme"), QStringLiteral("1"));
       break;
     case rethread::ColorScheme::kDark:
-      flag = QStringLiteral("1");
+      settings.insert(QStringLiteral("preferredColorScheme"), QStringLiteral("0"));
       break;
     case rethread::ColorScheme::kAuto:
-      flag = QStringLiteral("2");
+      settings.remove(QStringLiteral("preferredColorScheme"));
       break;
   }
-  QString existing = QString::fromUtf8(qgetenv("QTWEBENGINE_CHROMIUM_FLAGS"));
-  if (!existing.isEmpty() && !existing.endsWith(' ')) {
-    existing.append(' ');
+
+  if (!settings.isEmpty()) {
+    const QString merged =
+        QStringLiteral("--blink-settings=%1").arg(ComposeBlinkSettings(settings));
+    other_flags << merged;
   }
-  existing.append(
-      QStringLiteral("--blink-settings=preferredColorScheme=%1").arg(flag));
-  qputenv("QTWEBENGINE_CHROMIUM_FLAGS", existing.toUtf8());
+
+  QString final_flags = ComposeChromiumFlags(other_flags);
+  qputenv("QTWEBENGINE_CHROMIUM_FLAGS", final_flags.toUtf8());
 }
 
 void ApplyQtPalette(QApplication& app, rethread::ColorScheme scheme) {
