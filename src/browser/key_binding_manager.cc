@@ -91,15 +91,6 @@ std::string KeyBindingManager::ExtractKeyLabel(const CefKeyEvent& event) const {
     return NormalizeKey(label);
   }
 
-  if ((event.modifiers & EVENTFLAG_CONTROL_DOWN) != 0 ||
-      (event.modifiers & EVENTFLAG_COMMAND_DOWN) != 0) {
-    const int value = event.character;
-    if (value >= 1 && value <= 26) {
-      std::string label(1, static_cast<char>('a' + value - 1));
-      return label;
-    }
-  }
-
   if (event.windows_key_code >= 65 && event.windows_key_code <= 90) {
     std::string label(1, static_cast<char>('a' + event.windows_key_code - 65));
     return label;
@@ -107,6 +98,15 @@ std::string KeyBindingManager::ExtractKeyLabel(const CefKeyEvent& event) const {
 
   if (event.windows_key_code == 9) {
     return "tab";
+  }
+
+  if ((event.modifiers & EVENTFLAG_CONTROL_DOWN) != 0 ||
+      (event.modifiers & EVENTFLAG_COMMAND_DOWN) != 0) {
+    const int value = event.character;
+    if (value >= 1 && value <= 26) {
+      std::string label(1, static_cast<char>('a' + value - 1));
+      return label;
+    }
   }
 
   return std::string();
