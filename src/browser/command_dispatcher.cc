@@ -4,8 +4,13 @@
 #include <sstream>
 #include <string>
 
-#include <QUrl>
+#include <QByteArray>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonValue>
 #include <QStringList>
+#include <QUrl>
+#include <QVariant>
 
 #include "browser/key_binding_manager.h"
 #include "browser/tab_manager.h"
@@ -64,6 +69,60 @@ std::string JsonEscape(const QString& value) {
   return escaped;
 }
 
+int HexCharValue(char c) {
+  if (c >= '0' && c <= '9') {
+    return c - '0';
+  }
+  if (c >= 'a' && c <= 'f') {
+    return 10 + (c - 'a');
+  }
+  if (c >= 'A' && c <= 'F') {
+    return 10 + (c - 'A');
+  }
+  return -1;
+}
+
+bool DecodeHex(const std::string& input, std::string* output) {
+  if (!output || input.size() % 2 != 0) {
+    return false;
+  }
+  output->clear();
+  output->reserve(input.size() / 2);
+  for (size_t i = 0; i + 1 < input.size(); i += 2) {
+    int hi = HexCharValue(input[i]);
+    int lo = HexCharValue(input[i + 1]);
+    if (hi < 0 || lo < 0) {
+      return false;
+    }
+    output->push_back(static_cast<char>((hi << 4) | lo));
+  }
+  return true;
+}
+
+bool ParsePositiveInt(const std::string& text, int* value) {
+  if (!value) {
+    return false;
+  }
+  bool ok = false;
+  int parsed = QString::fromStdString(text).toInt(&ok);
+  if (!ok || parsed <= 0) {
+    return false;
+  }
+  *value = parsed;
+  return true;
+}
+
+QString VariantToJson(const QVariant& value) {
+  QJsonArray wrapper;
+  wrapper.append(QJsonValue::fromVariant(value));
+  QJsonDocument doc(wrapper);
+  QByteArray raw = doc.toJson(QJsonDocument::Compact);
+  if (raw.size() >= 2 && raw.front() == '[' && raw.back() == ']') {
+    return QString::fromUtf8(raw.mid(1, raw.size() - 2));
+  }
+  return QStringLiteral("null");
+}
+
 }  // namespace
 
 CommandDispatcher::CommandDispatcher(TabManager* tab_manager,
@@ -120,6 +179,11 @@ QString CommandDispatcher::Execute(const QString& command) const {
     std::string rest;
     std::getline(stream, rest);
     return HandleTabStrip(QString::fromStdString(rest));
+  }
+  if (op == "eval") {
+    std::string rest;
+    std::getline(stream, rest);
+    return HandleEval(QString::fromStdString(rest));
   }
 
   return QStringLiteral("ERR unknown command\n");
@@ -355,6 +419,87 @@ QString CommandDispatcher::HandleTabStrip(const QString& args) const {
     return QString();
   }
   return QStringLiteral("ERR unknown tabstrip action\n");
+}
+
+QString CommandDispatcher::HandleEval(const QString& args) const {
+  if (!tab_manager_) {
+    return QStringLiteral("ERR tabs unavailable\n");
+  }
+  std::istringstream stream(args.toStdString());
+  std::string token;
+  int tab_id = 0;
+  int tab_index = 0;
+  std::string code_hex;
+  while (stream >> token) {
+    if (token == "--tab-id") {
+      std::string value;
+      if (!(stream >> value) || !ParsePositiveInt(value, &tab_id)) {
+        return QStringLiteral("ERR invalid --tab-id value\n");
+      }
+      continue;
+    }
+    const std::string tab_id_prefix = "--tab-id=";
+    if (token.rfind(tab_id_prefix, 0) == 0) {
+      if (!ParsePositiveInt(token.substr(tab_id_prefix.size()), &tab_id)) {
+        return QStringLiteral("ERR invalid --tab-id value\n");
+      }
+      continue;
+    }
+    if (token == "--tab-index") {
+      std::string value;
+      if (!(stream >> value) || !ParsePositiveInt(value, &tab_index)) {
+        return QStringLiteral("ERR invalid --tab-index value\n");
+      }
+      continue;
+    }
+    const std::string tab_index_prefix = "--tab-index=";
+    if (token.rfind(tab_index_prefix, 0) == 0) {
+      if (!ParsePositiveInt(token.substr(tab_index_prefix.size()),
+                            &tab_index)) {
+        return QStringLiteral("ERR invalid --tab-index value\n");
+      }
+      continue;
+    }
+    if (token == "--code") {
+      if (!(stream >> code_hex)) {
+        return QStringLiteral("ERR missing --code value\n");
+      }
+      continue;
+    }
+    const std::string code_prefix = "--code=";
+    if (token.rfind(code_prefix, 0) == 0) {
+      code_hex = token.substr(code_prefix.size());
+      continue;
+    }
+    if (token.empty()) {
+      continue;
+    }
+    return QStringLiteral("ERR unknown eval flag\n");
+  }
+
+  if (code_hex.empty()) {
+    return QStringLiteral("ERR missing eval payload\n");
+  }
+  if (tab_id > 0 && tab_index > 0) {
+    return QStringLiteral("ERR specify only one tab selector\n");
+  }
+
+  std::string decoded;
+  if (!DecodeHex(code_hex, &decoded)) {
+    return QStringLiteral("ERR invalid eval payload encoding\n");
+  }
+
+  QVariant result;
+  QString error_message;
+  if (!tab_manager_->EvaluateJavaScript(
+          QString::fromUtf8(decoded.c_str(), static_cast<int>(decoded.size())),
+          tab_id, tab_index, &result, &error_message)) {
+    if (!error_message.isEmpty()) {
+      return QStringLiteral("ERR %1\n").arg(error_message);
+    }
+    return QStringLiteral("ERR failed to evaluate script\n");
+  }
+  return VariantToJson(result) + QChar('\n');
 }
 
 }  // namespace rethread

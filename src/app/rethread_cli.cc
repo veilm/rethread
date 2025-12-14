@@ -16,6 +16,9 @@ void PrintCliUsage() {
   std::cout << "Usage:\n"
             << "  rethread tabs [--user-data-dir=PATH] <command>\n"
             << "    Interact with a running instance (list, switch, cycle, open ...).\n"
+            << "  rethread eval [--user-data-dir=PATH] [--stdin]\n"
+            << "                [--tab-id=N|--tab-index=N] <script>\n"
+            << "    Evaluate JavaScript in a tab and print the JSON-encoded result.\n"
             << "  rethread bind [--user-data-dir=PATH] [mods] --key=K -- command\n"
             << "    Register a key binding that runs `command`.\n"
             << "  rethread unbind [--user-data-dir=PATH] [mods] --key=K\n"
@@ -88,6 +91,10 @@ int main(int argc, char* argv[]) {
   if (command == "tabstrip") {
     return rethread::RunTabStripCli(argc - 2, argv + 2,
                                     rethread::DefaultUserDataDir());
+  }
+  if (command == "eval") {
+    return rethread::RunEvalCli(argc - 2, argv + 2,
+                                rethread::DefaultUserDataDir());
   }
 
   if (command == "browser") {

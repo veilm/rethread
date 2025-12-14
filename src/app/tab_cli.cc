@@ -10,6 +10,8 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <cstdlib>
+#include <limits>
 
 namespace rethread {
 namespace {
@@ -50,6 +52,16 @@ void PrintUnbindUsage() {
 void PrintTabStripUsage() {
   std::cerr << "Usage: rethread tabstrip [--user-data-dir=PATH] "
                "show|hide|toggle|peek <ms>\n";
+}
+
+void PrintEvalUsage() {
+  std::cerr
+      << "Usage: rethread eval [--user-data-dir=PATH] [--stdin]\n"
+      << "                     [--tab-id=N|--tab-index=N] <script>\n"
+      << "Options:\n"
+      << "  --stdin              Read the script from stdin instead of argv\n"
+      << "  --tab-id=N           Target a specific tab id (default: active tab)\n"
+      << "  --tab-index=N        Target the 1-based tab index\n";
 }
 
 struct BindingOptions {
@@ -175,7 +187,6 @@ bool SendCommand(const std::string& socket_path, const std::string& payload) {
     close(fd);
     return false;
   }
-  shutdown(fd, SHUT_WR);
 
   char buffer[512];
   ssize_t n = 0;
@@ -184,6 +195,32 @@ bool SendCommand(const std::string& socket_path, const std::string& payload) {
   }
   close(fd);
   return true;
+}
+
+bool ParsePositiveInt(const std::string& text, int* value) {
+  if (!value) {
+    return false;
+  }
+  errno = 0;
+  char* end = nullptr;
+  long parsed = std::strtol(text.c_str(), &end, 10);
+  if (errno != 0 || !end || *end != '\0' || parsed <= 0 ||
+      parsed > std::numeric_limits<int>::max()) {
+    return false;
+  }
+  *value = static_cast<int>(parsed);
+  return true;
+}
+
+std::string HexEncode(const std::string& input) {
+  static constexpr char kHex[] = "0123456789abcdef";
+  std::string output;
+  output.reserve(input.size() * 2);
+  for (unsigned char c : input) {
+    output.push_back(kHex[(c >> 4) & 0xF]);
+    output.push_back(kHex[c & 0xF]);
+  }
+  return output;
 }
 
 }  // namespace
@@ -387,6 +424,130 @@ int RunUnbindCli(int argc,
     payload << " --command";
   }
   payload << " --key=" << options.key << "\n";
+
+  if (!SendCommand(TabSocketPath(user_data_dir), payload.str())) {
+    return 1;
+  }
+  return 0;
+}
+
+int RunEvalCli(int argc,
+               char* argv[],
+               const std::string& default_user_data_dir) {
+  std::string user_data_dir = default_user_data_dir;
+  int index = 0;
+  if (!ParseUserDataDir(argc, argv, &user_data_dir, &index)) {
+    return 1;
+  }
+
+  bool use_stdin = false;
+  int tab_id = 0;
+  int tab_index = 0;
+  while (index < argc) {
+    std::string arg = argv[index];
+    if (arg == "--help" || arg == "-h") {
+      PrintEvalUsage();
+      return 0;
+    }
+    if (arg == "--stdin") {
+      use_stdin = true;
+      ++index;
+      continue;
+    }
+    if (arg == "--tab-id") {
+      if (index + 1 >= argc) {
+        std::cerr << "--tab-id requires a value\n";
+        return 1;
+      }
+      if (!ParsePositiveInt(argv[index + 1], &tab_id)) {
+        std::cerr << "Invalid --tab-id value\n";
+        return 1;
+      }
+      index += 2;
+      continue;
+    }
+    const std::string tab_id_prefix = "--tab-id=";
+    if (arg.rfind(tab_id_prefix, 0) == 0) {
+      if (!ParsePositiveInt(arg.substr(tab_id_prefix.size()), &tab_id)) {
+        std::cerr << "Invalid --tab-id value\n";
+        return 1;
+      }
+      ++index;
+      continue;
+    }
+    if (arg == "--tab-index") {
+      if (index + 1 >= argc) {
+        std::cerr << "--tab-index requires a value\n";
+        return 1;
+      }
+      if (!ParsePositiveInt(argv[index + 1], &tab_index)) {
+        std::cerr << "Invalid --tab-index value\n";
+        return 1;
+      }
+      index += 2;
+      continue;
+    }
+    const std::string tab_index_prefix = "--tab-index=";
+    if (arg.rfind(tab_index_prefix, 0) == 0) {
+      if (!ParsePositiveInt(arg.substr(tab_index_prefix.size()), &tab_index)) {
+        std::cerr << "Invalid --tab-index value\n";
+        return 1;
+      }
+      ++index;
+      continue;
+    }
+    if (arg == "--") {
+      ++index;
+      break;
+    }
+    break;
+  }
+
+  if (tab_id > 0 && tab_index > 0) {
+    std::cerr << "Specify at most one tab selector (--tab-id or --tab-index)\n";
+    return 1;
+  }
+
+  std::string script;
+  if (use_stdin) {
+    if (index < argc) {
+      std::cerr << "--stdin cannot be combined with a script argument\n";
+      return 1;
+    }
+    std::ostringstream buffer;
+    buffer << std::cin.rdbuf();
+    script = buffer.str();
+  } else {
+    if (index >= argc) {
+      std::cerr << "eval requires a script argument\n";
+      PrintEvalUsage();
+      return 1;
+    }
+    std::ostringstream buffer;
+    for (int i = index; i < argc; ++i) {
+      if (i > index) {
+        buffer << " ";
+      }
+      buffer << argv[i];
+    }
+    script = buffer.str();
+  }
+
+  if (script.empty()) {
+    std::cerr << "eval requires a non-empty script\n";
+    return 1;
+  }
+
+  const std::string encoded = HexEncode(script);
+  std::ostringstream payload;
+  payload << "eval";
+  if (tab_id > 0) {
+    payload << " --tab-id=" << tab_id;
+  }
+  if (tab_index > 0) {
+    payload << " --tab-index=" << tab_index;
+  }
+  payload << " --code=" << encoded << "\n";
 
   if (!SendCommand(TabSocketPath(user_data_dir), payload.str())) {
     return 1;
