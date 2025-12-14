@@ -12,10 +12,11 @@ class TabIpcServer {
  public:
   static TabIpcServer* Get();
 
-  void Start(const std::string& socket_path);
-  void Stop();
-  void Join();
-  bool IsStopping() const;
+ void Start(const std::string& socket_path);
+ void Stop();
+ void Join();
+ bool IsStopping() const;
+  std::string ExecuteCommand(const std::string& command);
 
  private:
   TabIpcServer();

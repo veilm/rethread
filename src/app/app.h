@@ -12,6 +12,7 @@ class RethreadApp : public CefApp, public CefBrowserProcessHandler {
   struct Options {
     int auto_exit_seconds = 0;
     std::string tab_socket_path;
+    std::string startup_script_path;
   };
 
   explicit RethreadApp(const Options& options);

@@ -29,4 +29,20 @@ std::string DefaultUserDataDir() {
   return base + "/rethread";
 }
 
+std::string DefaultConfigDir() {
+  std::string base = GetEnv("XDG_CONFIG_HOME");
+  if (base.empty()) {
+    std::string home = GetEnv("HOME");
+    if (home.empty()) {
+      return ".config/rethread";
+    }
+    base = home + "/.config";
+  }
+  return base + "/rethread";
+}
+
+std::string DefaultStartupScriptPath() {
+  return DefaultConfigDir() + "/startup.sh";
+}
+
 }  // namespace rethread

@@ -20,6 +20,8 @@ void PrintTabUsage() {
                "  get|list              List open tabs.\n"
                "  switch <id>           Activate the tab with the given id.\n"
                "  cycle <delta>         Move relative tab focus.\n"
+               "  bind [opts] --key=K -- command\n"
+               "                        Register a key binding that runs `command`.\n"
                "  open <url>            Open a new tab with the URL.\n"
                "  tabstrip show|hide|toggle\n"
                "                        Control the tab strip overlay visibility.\n"
@@ -123,6 +125,97 @@ int RunTabCli(int argc, char* argv[], const std::string& default_user_data_dir) 
       return 1;
     }
     payload << "cycle " << argv[index++] << "\n";
+  } else if (cmd == "bind") {
+    bool alt = false;
+    bool ctrl = false;
+    bool shift = false;
+    bool command = false;
+    bool consume = true;
+    std::string key;
+    while (index < argc) {
+      std::string arg = argv[index];
+      if (arg == "--") {
+        ++index;
+        break;
+      }
+      if (arg == "--alt") {
+        alt = true;
+        ++index;
+        continue;
+      }
+      if (arg == "--ctrl") {
+        ctrl = true;
+        ++index;
+        continue;
+      }
+      if (arg == "--shift") {
+        shift = true;
+        ++index;
+        continue;
+      }
+      if (arg == "--command" || arg == "--meta") {
+        command = true;
+        ++index;
+        continue;
+      }
+      if (arg == "--no-consume") {
+        consume = false;
+        ++index;
+        continue;
+      }
+      const std::string key_prefix = "--key=";
+      if (arg.rfind(key_prefix, 0) == 0) {
+        key = arg.substr(key_prefix.size());
+        ++index;
+        continue;
+      }
+      if (arg == "--key") {
+        if (index + 1 >= argc) {
+          std::cerr << "--key requires a value\n";
+          return 1;
+        }
+        key = argv[index + 1];
+        index += 2;
+        continue;
+      }
+      break;
+    }
+
+    if (key.empty()) {
+      std::cerr << "bind requires --key\n";
+      return 1;
+    }
+    if (index >= argc) {
+      std::cerr << "bind requires a command\n";
+      return 1;
+    }
+
+    std::ostringstream command_stream;
+    for (int i = index; i < argc; ++i) {
+      if (i > index) {
+        command_stream << " ";
+      }
+      command_stream << argv[i];
+    }
+
+    payload << "bind";
+    if (alt) {
+      payload << " --alt";
+    }
+    if (ctrl) {
+      payload << " --ctrl";
+    }
+    if (shift) {
+      payload << " --shift";
+    }
+    if (command) {
+      payload << " --command";
+    }
+    if (!consume) {
+      payload << " --no-consume";
+    }
+    payload << " --key=" << key;
+    payload << " -- " << command_stream.str() << "\n";
   } else if (cmd == "open") {
     if (index >= argc) {
       std::cerr << "open requires a URL\n";

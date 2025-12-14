@@ -14,7 +14,6 @@ sudo chown root:root $(find . -type f -name chrome-sandbox)
 sudo chmod 4755 $(find . -type f -name chrome-sandbox)
 
 make -j$(nproc)
-sudo cp tools/rethread_key_handler.py /usr/local/bin/rethread-key-handler
 
 # launch the browser UI (for direct access you can also run rethread-browser)
 ./out/Release/rethread browser --help
@@ -22,9 +21,31 @@ sudo cp tools/rethread_key_handler.py /usr/local/bin/rethread-key-handler
 
 The `rethread` binary is a light CLI wrapper. Use `rethread browser ...` to
 launch the UI and `rethread tabs ...` to talk to a running instance without
-reloading CEF each time.
+reloading CEF each time. After startup, the browser automatically runs
+`$XDG_CONFIG_HOME/rethread/startup.sh` (override with `--startup-script=PATH`)
+so you can pre-register keybindings or tweak state declaratively.
 
-## key handler
+## key bindings
+
+Bindings now live inside the browser—no external handler required. Register one
+with the CLI and it stays in memory until you quit:
+
+```
+# Alt+J / Alt+K cycle tabs without touching Python
+rethread bind --alt --key=j -- rethread tabs cycle 1
+rethread bind --alt --key=k -- rethread tabs cycle -1
+
+# Ctrl+T runs your own script but still hands the key to the page
+rethread bind --ctrl --key=t --no-consume -- sh -c 'notify-send "new tab"'
+```
+
+Each binding accepts modifier flags (`--alt`, `--ctrl`, `--shift`,
+`--command`/`--meta`), a `--key=<value>`, optional `--no-consume`, and the shell
+command to run after `--`. Commands execute via `/bin/sh -c ...`, so any shell
+snippet works. Drop the same lines into
+`~/.config/rethread/startup.sh` to have them applied automatically on launch.
+
+## external key handler (optional)
 
 Rethread looks for an executable named `rethread-key-handler` on `PATH`. Every
 non-repeat `KEYEVENT_RAWKEYDOWN` event launches that handler with CLI flags
@@ -46,12 +67,15 @@ The handler should exit with status `2` if it consumed the shortcut (preventing
 the default browser action). Exit codes `0` or `1` tell the browser to pass the
 event through unchanged.
 
-An example handler script lives at `tools/rethread_key_handler.py`. It normalizes
-Ctrl combinations (ASCII control codes 1-26) back to printable labels so
-`Ctrl+E` still shows up as `e`, and returns exit code `2` only for shortcuts it
-wants to consume. Symlink or
-copy it somewhere on your `PATH` and customize it to run whichever commands you
-need.
+We still ship two example handlers under `tools/` for people who prefer
+delegating to their own scripts instead of the built-in binder:
+
+- `rethread_key_handler.py` (easy to customize).
+- `rethread_key_handler.c` → `out/Release/rethread-key-handler` (native,
+  ultra-fast startup).
+
+Symlink whichever one you need onto your `PATH` and customize it to run any
+commands you like.
 
 ## tab strip overlay
 

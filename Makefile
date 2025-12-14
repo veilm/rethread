@@ -48,6 +48,7 @@ BROWSER_SRCS := \
 	src/app/user_dirs.cc \
 	src/common/theme.cc \
 	src/common/debug_log.cc \
+	src/browser/key_binding_manager.cc \
 	src/browser/tab_strip.cc \
 	src/browser/tab_manager.cc \
 	src/browser/tab_ipc_server.cc \
