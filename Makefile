@@ -41,10 +41,11 @@ WRAP_OBJS  := $(patsubst $(WRAP_DIR)/%.cc,$(OUT)/libcef_dll/%.o,$(WRAP_SRCS))
 WRAP_LIB   := $(OUT)/libcef_dll/libcef_dll_wrapper.a
 
 # -------- app --------
-APP_SRCS := \
+BROWSER_SRCS := \
 	src/main_linux.cc \
 	src/app/app.cc \
 	src/app/tab_cli.cc \
+	src/app/user_dirs.cc \
 	src/common/theme.cc \
 	src/common/debug_log.cc \
 	src/browser/tab_strip.cc \
@@ -53,11 +54,19 @@ APP_SRCS := \
 	src/browser/client.cc \
 	src/browser/client_linux.cc \
 	src/browser/windowing.cc
-APP_OBJS := $(patsubst src/%.cc,$(OUT)/app/%.o,$(APP_SRCS))
-APP_BIN  := $(OUT)/rethread
+BROWSER_OBJS := $(patsubst src/%.cc,$(OUT)/app/%.o,$(BROWSER_SRCS))
+BROWSER_BIN  := $(OUT)/rethread-browser
+
+CLI_SRCS := \
+	src/app/rethread_cli.cc \
+	src/app/tab_cli.cc \
+	src/app/user_dirs.cc
+CLI_OBJS := $(patsubst src/%.cc,$(OUT)/cli/%.o,$(CLI_SRCS))
+CLI_BIN  := $(OUT)/rethread
+CLI_LDFLAGS := -pthread
 
 # -------- rules --------
-all: $(APP_BIN) copy-resources
+all: $(CLI_BIN) $(BROWSER_BIN) copy-resources
 
 $(OUT)/libcef_dll/%.o: $(WRAP_DIR)/%.cc
 	@mkdir -p $(dir $@)
@@ -71,15 +80,23 @@ $(OUT)/app/%.o: src/%.cc
 	@mkdir -p $(dir $@)
 	$(CXX) $(APP_CXXFLAGS) -c $< -o $@
 
-$(APP_BIN): stop-rethread $(WRAP_LIB) $(APP_OBJS)
+$(OUT)/cli/%.o: src/%.cc
 	@mkdir -p $(dir $@)
-	$(CXX) -o $@ $(APP_OBJS) $(WRAP_LIB) $(LDFLAGS)
+	$(CXX) $(APP_CXXFLAGS) -c $< -o $@
 
-.PHONY: stop-rethread
+$(BROWSER_BIN): stop-rethread-browser $(WRAP_LIB) $(BROWSER_OBJS)
+	@mkdir -p $(dir $@)
+	$(CXX) -o $@ $(BROWSER_OBJS) $(WRAP_LIB) $(LDFLAGS)
+
+.PHONY: stop-rethread-browser
 # Kill any stale dev instance so the linker doesn't trigger a core dump while overwriting the binary
-stop-rethread:
-	@echo "Stopping running rethread instances (if any)..."
-	- pkill -x rethread >/dev/null 2>&1 || true
+stop-rethread-browser:
+	@echo "Stopping running rethread-browser instances (if any)..."
+	- pkill -x rethread-browser >/dev/null 2>&1 || true
+
+$(CLI_BIN): $(CLI_OBJS)
+	@mkdir -p $(dir $@)
+	$(CXX) -o $@ $(CLI_OBJS) $(CLI_LDFLAGS)
 
 copy-resources:
 	# Put runtime files next to the binary
@@ -103,11 +120,11 @@ copy-resources:
 	cp -rf $(CEF_LOCALES_DIR)/* $(OUT)/locales/
 
 run: all
-	cd $(OUT) && ./rethread --url=https://veilm.github.io/rethread/
+	cd $(OUT) && ./rethread browser --url=https://veilm.github.io/rethread/
 
 # Optional: run without copying by pointing to in-place resources
-run-dev: $(APP_BIN)
-	cd $(OUT) && ./rethread \
+run-dev: $(CLI_BIN) $(BROWSER_BIN)
+	cd $(OUT) && ./rethread browser \
 	  --resources-dir-path="$(CEF_RES_DIR)" \
 	  --locales-dir-path="$(CEF_LOCALES_DIR)" \
 	  --url=https://veilm.github.io/rethread/

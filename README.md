@@ -16,8 +16,13 @@ sudo chmod 4755 $(find . -type f -name chrome-sandbox)
 make -j$(nproc)
 sudo cp tools/rethread_key_handler.py /usr/local/bin/rethread-key-handler
 
-./out/Release/rethread --help
+# launch the browser UI (for direct access you can also run rethread-browser)
+./out/Release/rethread browser --help
 ```
+
+The `rethread` binary is a light CLI wrapper. Use `rethread browser ...` to
+launch the UI and `rethread tabs ...` to talk to a running instance without
+reloading CEF each time.
 
 ## key handler
 
