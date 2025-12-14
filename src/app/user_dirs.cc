@@ -17,7 +17,7 @@ std::string GetEnv(const char* key) {
 
 namespace rethread {
 
-std::string DefaultUserDataDir() {
+std::string DefaultUserDataRoot() {
   std::string base = GetEnv("XDG_DATA_HOME");
   if (base.empty()) {
     std::string home = GetEnv("HOME");
@@ -27,6 +27,14 @@ std::string DefaultUserDataDir() {
     base = home + "/.local/share";
   }
   return base + "/rethread";
+}
+
+std::string DefaultUserDataDir() {
+  std::string root = DefaultUserDataRoot();
+  if (root.empty()) {
+    return kDefaultProfileName;
+  }
+  return root + "/" + kDefaultProfileName;
 }
 
 std::string DefaultConfigDir() {

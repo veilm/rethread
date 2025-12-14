@@ -26,8 +26,10 @@ struct CliOptions {
   std::string color_scheme = "dark";
   std::string initial_url = "https://veilm.github.io/rethread/";
   std::string startup_script_path;
+  std::string profile_name = rethread::kDefaultProfileName;
   int auto_exit_seconds = 0;
   uint32_t background_color = rethread::kDefaultBackgroundColor;
+  bool user_data_dir_overridden = false;
 };
 
 bool ParseColorValue(const std::string& input, uint32_t* color) {
@@ -77,10 +79,12 @@ CliOptions ParseCliOptions(int argc, char* argv[]) {
     const std::string user_data_prefix = "--user-data-dir=";
     if (arg.rfind(user_data_prefix, 0) == 0) {
       options.user_data_dir = arg.substr(user_data_prefix.size());
+      options.user_data_dir_overridden = true;
       continue;
     }
     if (arg == "--user-data-dir" && i + 1 < argc) {
       options.user_data_dir = argv[++i];
+      options.user_data_dir_overridden = true;
       continue;
     }
 
@@ -104,6 +108,16 @@ CliOptions ParseCliOptions(int argc, char* argv[]) {
                   << argv[i + 1] << "\n";
       }
       ++i;
+      continue;
+    }
+
+    const std::string profile_prefix = "--profile=";
+    if (arg.rfind(profile_prefix, 0) == 0) {
+      options.profile_name = arg.substr(profile_prefix.size());
+      continue;
+    }
+    if (arg == "--profile" && i + 1 < argc) {
+      options.profile_name = argv[++i];
       continue;
     }
 
@@ -157,6 +171,18 @@ CliOptions ParseCliOptions(int argc, char* argv[]) {
       continue;
     }
   }
+  if (!options.user_data_dir_overridden) {
+    std::string profile = options.profile_name;
+    if (profile.empty()) {
+      profile = rethread::kDefaultProfileName;
+    }
+    const std::string root = rethread::DefaultUserDataRoot();
+    if (root.empty()) {
+      options.user_data_dir = profile;
+    } else {
+      options.user_data_dir = root + "/" + profile;
+    }
+  }
   return options;
 }
 
@@ -168,7 +194,10 @@ void PrintHelp() {
       << "Options:\n"
       << "  --help, -h              Show this help and exit.\n"
       << "  --user-data-dir=PATH    Override the profile directory (defaults to\n"
-      << "                          $XDG_DATA_HOME/rethread).\n"
+      << "                          $XDG_DATA_HOME/rethread/PROFILE).\n"
+      << "  --profile=NAME          Use a profile subdirectory NAME (default:\n"
+      << "                          " << rethread::kDefaultProfileName
+      << ").\n"
       << "  --background-color=HEX  Default background color in #RRGGBB or\n"
       << "                          #AARRGGBB format.\n"
       << "  --url=URL               Initial page to load (defaults to\n"
