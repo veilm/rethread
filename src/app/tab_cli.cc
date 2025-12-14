@@ -204,7 +204,7 @@ int RunTabCli(int argc, char* argv[], const std::string& default_user_data_dir) 
   if (index < argc) {
     std::string maybe_help = argv[index];
     if (maybe_help == "--help" || maybe_help == "-h") {
-      PrintBindUsage();
+      PrintTabUsage();
       return 0;
     }
   }
