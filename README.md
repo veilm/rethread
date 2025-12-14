@@ -35,47 +35,14 @@ with the CLI and it stays in memory until you quit:
 rethread bind --alt --key=j -- rethread tabs cycle 1
 rethread bind --alt --key=k -- rethread tabs cycle -1
 
-# Ctrl+T runs your own script but still hands the key to the page
-rethread bind --ctrl --key=t --no-consume -- sh -c 'notify-send "new tab"'
+rethread bind --ctrl --key=t --no-consume -- "notify-send 'new tab'"
 ```
 
 Each binding accepts modifier flags (`--alt`, `--ctrl`, `--shift`,
 `--command`/`--meta`), a `--key=<value>`, optional `--no-consume`, and the shell
 command to run after `--`. Commands execute via `/bin/sh -c ...`, so any shell
 snippet works. Drop the same lines into
-`~/.config/rethread/startup.sh` to have them applied automatically on launch.
-
-## external key handler (optional)
-
-Rethread looks for an executable named `rethread-key-handler` on `PATH`. Every
-non-repeat `KEYEVENT_RAWKEYDOWN` event launches that handler with CLI flags
-describing the key, for example:
-
-```
-rethread-key-handler key \
-  --type=rawkeydown \
-  --windows-key-code=69 \
-  --native-key-code=38 \
-  --modifiers=2 \
-  --character=101 \
-  --unmodified-character=101 \
-  --key-label=e \
-  --ctrl
-```
-
-The handler should exit with status `2` if it consumed the shortcut (preventing
-the default browser action). Exit codes `0` or `1` tell the browser to pass the
-event through unchanged.
-
-We still ship two example handlers under `tools/` for people who prefer
-delegating to their own scripts instead of the built-in binder:
-
-- `rethread_key_handler.py` (easy to customize).
-- `rethread_key_handler.c` → `out/Release/rethread-key-handler` (native,
-  ultra-fast startup).
-
-Symlink whichever one you need onto your `PATH` and customize it to run any
-commands you like.
+`$XDG_CONFIG_HOME/rethread/startup.sh` to have them applied automatically on launch.
 
 ## tab strip overlay
 
