@@ -15,17 +15,113 @@ namespace rethread {
 namespace {
 
 void PrintTabUsage() {
-  std::cerr << "Usage: rethread tabs [--user-data-dir=PATH] <command>\n"
-               "Commands:\n"
-               "  get|list              List open tabs.\n"
-               "  switch <id>           Activate the tab with the given id.\n"
-               "  cycle <delta>         Move relative tab focus.\n"
-               "  bind [opts] --key=K -- command\n"
-               "                        Register a key binding that runs `command`.\n"
-               "  open <url>            Open a new tab with the URL.\n"
-               "  tabstrip show|hide|toggle\n"
-               "                        Control the tab strip overlay visibility.\n"
-               "  tabstrip peek <ms>    Show the tab strip briefly, then hide.\n";
+  std::cerr
+      << "Usage: rethread tabs [--user-data-dir=PATH] <command>\n"
+         "Commands:\n"
+         "  get|list              List open tabs.\n"
+         "  switch <id>           Activate the tab with the given id.\n"
+         "  cycle <delta>         Move relative tab focus.\n"
+         "  open <url>            Open a new tab with the URL.\n"
+         "\n"
+         "Use `rethread bind ...` / `rethread unbind ...` for key bindings and\n"
+         "`rethread tabstrip ...` to control the overlay.\n";
+}
+
+void PrintBindUsage() {
+  std::cerr
+      << "Usage: rethread bind [--user-data-dir=PATH] [mods] [--no-consume]\n"
+      << "                      --key=K -- command...\n"
+      << "Mods:\n"
+      << "  --alt --ctrl --shift --command/--meta\n"
+      << "Other flags:\n"
+      << "  --no-consume          Allow the key event to pass through to the page\n"
+      << "  --user-data-dir PATH  Target a specific profile/socket\n";
+}
+
+void PrintUnbindUsage() {
+  std::cerr
+      << "Usage: rethread unbind [--user-data-dir=PATH] [mods] --key=K\n"
+      << "Mods:\n"
+      << "  --alt --ctrl --shift --command/--meta\n";
+}
+
+void PrintTabStripUsage() {
+  std::cerr << "Usage: rethread tabstrip [--user-data-dir=PATH] "
+               "show|hide|toggle|peek <ms>\n";
+}
+
+struct BindingOptions {
+  bool alt = false;
+  bool ctrl = false;
+  bool shift = false;
+  bool command = false;
+  bool consume = true;
+  std::string key;
+};
+
+bool ParseBindingOptions(int argc,
+                         char* argv[],
+                         int* index,
+                         BindingOptions* options,
+                         bool allow_consume,
+                         bool* encountered_separator) {
+  if (!options) {
+    return false;
+  }
+  bool separator = false;
+  while (*index < argc) {
+    std::string arg = argv[*index];
+    if (arg == "--") {
+      separator = true;
+      ++(*index);
+      break;
+    }
+    if (arg == "--alt") {
+      options->alt = true;
+      ++(*index);
+      continue;
+    }
+    if (arg == "--ctrl") {
+      options->ctrl = true;
+      ++(*index);
+      continue;
+    }
+    if (arg == "--shift") {
+      options->shift = true;
+      ++(*index);
+      continue;
+    }
+    if (arg == "--command" || arg == "--meta") {
+      options->command = true;
+      ++(*index);
+      continue;
+    }
+    if (allow_consume && arg == "--no-consume") {
+      options->consume = false;
+      ++(*index);
+      continue;
+    }
+    const std::string key_prefix = "--key=";
+    if (arg.rfind(key_prefix, 0) == 0) {
+      options->key = arg.substr(key_prefix.size());
+      ++(*index);
+      continue;
+    }
+    if (arg == "--key") {
+      if (*index + 1 >= argc) {
+        std::cerr << "--key requires a value\n";
+        return false;
+      }
+      options->key = argv[*index + 1];
+      *index += 2;
+      continue;
+    }
+    break;
+  }
+  if (encountered_separator) {
+    *encountered_separator = separator;
+  }
+  return true;
 }
 
 bool ParseUserDataDir(int argc,
@@ -103,6 +199,13 @@ int RunTabCli(int argc, char* argv[], const std::string& default_user_data_dir) 
   if (!ParseUserDataDir(argc, argv, &user_data_dir, &index)) {
     return 1;
   }
+  if (index < argc) {
+    std::string maybe_help = argv[index];
+    if (maybe_help == "--help" || maybe_help == "-h") {
+      PrintBindUsage();
+      return 0;
+    }
+  }
   if (index >= argc) {
     PrintTabUsage();
     return 1;
@@ -125,97 +228,6 @@ int RunTabCli(int argc, char* argv[], const std::string& default_user_data_dir) 
       return 1;
     }
     payload << "cycle " << argv[index++] << "\n";
-  } else if (cmd == "bind") {
-    bool alt = false;
-    bool ctrl = false;
-    bool shift = false;
-    bool command = false;
-    bool consume = true;
-    std::string key;
-    while (index < argc) {
-      std::string arg = argv[index];
-      if (arg == "--") {
-        ++index;
-        break;
-      }
-      if (arg == "--alt") {
-        alt = true;
-        ++index;
-        continue;
-      }
-      if (arg == "--ctrl") {
-        ctrl = true;
-        ++index;
-        continue;
-      }
-      if (arg == "--shift") {
-        shift = true;
-        ++index;
-        continue;
-      }
-      if (arg == "--command" || arg == "--meta") {
-        command = true;
-        ++index;
-        continue;
-      }
-      if (arg == "--no-consume") {
-        consume = false;
-        ++index;
-        continue;
-      }
-      const std::string key_prefix = "--key=";
-      if (arg.rfind(key_prefix, 0) == 0) {
-        key = arg.substr(key_prefix.size());
-        ++index;
-        continue;
-      }
-      if (arg == "--key") {
-        if (index + 1 >= argc) {
-          std::cerr << "--key requires a value\n";
-          return 1;
-        }
-        key = argv[index + 1];
-        index += 2;
-        continue;
-      }
-      break;
-    }
-
-    if (key.empty()) {
-      std::cerr << "bind requires --key\n";
-      return 1;
-    }
-    if (index >= argc) {
-      std::cerr << "bind requires a command\n";
-      return 1;
-    }
-
-    std::ostringstream command_stream;
-    for (int i = index; i < argc; ++i) {
-      if (i > index) {
-        command_stream << " ";
-      }
-      command_stream << argv[i];
-    }
-
-    payload << "bind";
-    if (alt) {
-      payload << " --alt";
-    }
-    if (ctrl) {
-      payload << " --ctrl";
-    }
-    if (shift) {
-      payload << " --shift";
-    }
-    if (command) {
-      payload << " --command";
-    }
-    if (!consume) {
-      payload << " --no-consume";
-    }
-    payload << " --key=" << key;
-    payload << " -- " << command_stream.str() << "\n";
   } else if (cmd == "open") {
     if (index >= argc) {
       std::cerr << "open requires a URL\n";
@@ -229,24 +241,6 @@ int RunTabCli(int argc, char* argv[], const std::string& default_user_data_dir) 
       payload << argv[i];
     }
     payload << "\n";
-  } else if (cmd == "tabstrip") {
-    if (index >= argc) {
-      std::cerr << "tabstrip requires an action\n";
-      return 1;
-    }
-    std::string action = argv[index++];
-    if (action == "show" || action == "hide" || action == "toggle") {
-      payload << "tabstrip " << action << "\n";
-    } else if (action == "peek") {
-      if (index >= argc) {
-        std::cerr << "tabstrip peek requires a duration in ms\n";
-        return 1;
-      }
-      payload << "tabstrip peek " << argv[index++] << "\n";
-    } else {
-      std::cerr << "Unknown tabstrip action: " << action << "\n";
-      return 1;
-    }
   } else {
     std::cerr << "Unknown tabs command: " << cmd << "\n";
     PrintTabUsage();
@@ -255,6 +249,187 @@ int RunTabCli(int argc, char* argv[], const std::string& default_user_data_dir) 
 
   const std::string socket_path = TabSocketPath(user_data_dir);
   if (!SendCommand(socket_path, payload.str())) {
+    return 1;
+  }
+  return 0;
+}
+
+int RunBindCli(int argc,
+               char* argv[],
+               const std::string& default_user_data_dir) {
+  std::string user_data_dir = default_user_data_dir;
+  int index = 0;
+  if (!ParseUserDataDir(argc, argv, &user_data_dir, &index)) {
+    return 1;
+  }
+  if (index < argc) {
+    std::string maybe_help = argv[index];
+    if (maybe_help == "--help" || maybe_help == "-h") {
+      PrintBindUsage();
+      return 0;
+    }
+  }
+
+  BindingOptions options;
+  if (!ParseBindingOptions(argc, argv, &index, &options, true, nullptr)) {
+    PrintBindUsage();
+    return 1;
+  }
+
+  if (options.key.empty()) {
+    std::cerr << "bind requires --key\n";
+    PrintBindUsage();
+    return 1;
+  }
+  if (index >= argc) {
+    std::cerr << "bind requires a command\n";
+    PrintBindUsage();
+    return 1;
+  }
+
+  std::ostringstream command_stream;
+  for (int i = index; i < argc; ++i) {
+    if (i > index) {
+      command_stream << " ";
+    }
+    command_stream << argv[i];
+  }
+
+  std::ostringstream payload;
+  payload << "bind";
+  if (options.alt) {
+    payload << " --alt";
+  }
+  if (options.ctrl) {
+    payload << " --ctrl";
+  }
+  if (options.shift) {
+    payload << " --shift";
+  }
+  if (options.command) {
+    payload << " --command";
+  }
+  if (!options.consume) {
+    payload << " --no-consume";
+  }
+  payload << " --key=" << options.key;
+  payload << " -- " << command_stream.str() << "\n";
+
+  if (!SendCommand(TabSocketPath(user_data_dir), payload.str())) {
+    return 1;
+  }
+  return 0;
+}
+
+int RunUnbindCli(int argc,
+                 char* argv[],
+                 const std::string& default_user_data_dir) {
+  std::string user_data_dir = default_user_data_dir;
+  int index = 0;
+  if (!ParseUserDataDir(argc, argv, &user_data_dir, &index)) {
+    return 1;
+  }
+  if (index < argc) {
+    std::string maybe_help = argv[index];
+    if (maybe_help == "--help" || maybe_help == "-h") {
+      PrintUnbindUsage();
+      return 0;
+    }
+  }
+
+  BindingOptions options;
+  bool saw_separator = false;
+  if (!ParseBindingOptions(argc, argv, &index, &options, false,
+                           &saw_separator)) {
+    PrintUnbindUsage();
+    return 1;
+  }
+  if (saw_separator) {
+    std::cerr << "unbind does not accept a command\n";
+    PrintUnbindUsage();
+    return 1;
+  }
+  if (options.key.empty()) {
+    std::cerr << "unbind requires --key\n";
+    PrintUnbindUsage();
+    return 1;
+  }
+  if (index < argc) {
+    std::cerr << "unbind does not accept extra arguments\n";
+    PrintUnbindUsage();
+    return 1;
+  }
+
+  std::ostringstream payload;
+  payload << "unbind";
+  if (options.alt) {
+    payload << " --alt";
+  }
+  if (options.ctrl) {
+    payload << " --ctrl";
+  }
+  if (options.shift) {
+    payload << " --shift";
+  }
+  if (options.command) {
+    payload << " --command";
+  }
+  payload << " --key=" << options.key << "\n";
+
+  if (!SendCommand(TabSocketPath(user_data_dir), payload.str())) {
+    return 1;
+  }
+  return 0;
+}
+
+int RunTabStripCli(int argc,
+                   char* argv[],
+                   const std::string& default_user_data_dir) {
+  std::string user_data_dir = default_user_data_dir;
+  int index = 0;
+  if (!ParseUserDataDir(argc, argv, &user_data_dir, &index)) {
+    return 1;
+  }
+  if (index >= argc) {
+    PrintTabStripUsage();
+    return 1;
+  }
+  if (index < argc) {
+    std::string maybe_help = argv[index];
+    if (maybe_help == "--help" || maybe_help == "-h") {
+      PrintTabStripUsage();
+      return 0;
+    }
+  }
+
+  std::string action = argv[index++];
+  std::ostringstream payload;
+  if (action == "show" || action == "hide" || action == "toggle") {
+    if (index < argc) {
+      std::cerr << "tabstrip " << action << " does not take extra arguments\n";
+      PrintTabStripUsage();
+      return 1;
+    }
+    payload << "tabstrip " << action << "\n";
+  } else if (action == "peek") {
+    if (index >= argc) {
+      std::cerr << "tabstrip peek requires a duration in ms\n";
+      PrintTabStripUsage();
+      return 1;
+    }
+    payload << "tabstrip peek " << argv[index++] << "\n";
+    if (index < argc) {
+      std::cerr << "tabstrip peek only accepts a single duration\n";
+      PrintTabStripUsage();
+      return 1;
+    }
+  } else {
+    std::cerr << "Unknown tabstrip action: " << action << "\n";
+    PrintTabStripUsage();
+    return 1;
+  }
+
+  if (!SendCommand(TabSocketPath(user_data_dir), payload.str())) {
     return 1;
   }
   return 0;

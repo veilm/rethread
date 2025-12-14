@@ -94,6 +94,7 @@ $(BROWSER_BIN): stop-rethread-browser $(WRAP_LIB) $(BROWSER_OBJS)
 stop-rethread-browser:
 	@echo "Stopping running rethread-browser instances (if any)..."
 	- pkill -x rethread-browser >/dev/null 2>&1 || true
+	- pkill -f '[r]ethread-browser' >/dev/null 2>&1 || true
 
 $(CLI_BIN): $(CLI_OBJS)
 	@mkdir -p $(dir $@)

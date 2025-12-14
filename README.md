@@ -43,6 +43,8 @@ Each binding accepts modifier flags (`--alt`, `--ctrl`, `--shift`,
 command to run after `--`. Commands execute via `/bin/sh -c ...`, so any shell
 snippet works. Drop the same lines into
 `$XDG_CONFIG_HOME/rethread/startup.sh` to have them applied automatically on launch.
+Use `rethread unbind [mods] --key=...` to clear a binding and fall back to the
+browser's default behavior for that key combo.
 
 ## tab strip overlay
 
@@ -50,16 +52,16 @@ The tab strip overlay starts hidden. Use the CLI to control it at runtime:
 
 ```
 # show / hide / toggle visibility
-rethread tabs tabstrip show
-rethread tabs tabstrip hide
-rethread tabs tabstrip toggle
+rethread tabstrip show
+rethread tabstrip hide
+rethread tabstrip toggle
 
 # briefly show it for 400ms, then auto-hide
-rethread tabs tabstrip peek 400
+rethread tabstrip peek 400
 
 # switch to next/previous tab, then peek for 750ms
-rethread tabs cycle 1 && rethread tabs tabstrip peek 750
-rethread tabs cycle -1 && rethread tabs tabstrip peek 750
+rethread tabs cycle 1 && rethread tabstrip peek 750
+rethread tabs cycle -1 && rethread tabstrip peek 750
 ```
 
 `peek` always shows the overlay immediately and schedules a hide after the given

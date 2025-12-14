@@ -25,6 +25,7 @@ class KeyBindingManager {
   static KeyBindingManager* Get();
 
   bool AddBinding(Binding binding);
+  bool RemoveBinding(const Binding& binding);
   std::optional<bool> HandleKeyEvent(const CefKeyEvent& event);
 
  private:

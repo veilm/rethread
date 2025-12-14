@@ -549,6 +549,50 @@ std::string TabIpcServer::HandleCommand(const std::string& command) {
     return "OK\n";
   }
 
+  if (op == "unbind") {
+    KeyBindingManager::Binding binding;
+    std::string token;
+    while (stream >> token) {
+      if (token == "--alt") {
+        binding.alt = true;
+        continue;
+      }
+      if (token == "--ctrl") {
+        binding.ctrl = true;
+        continue;
+      }
+      if (token == "--shift") {
+        binding.shift = true;
+        continue;
+      }
+      if (token == "--command" || token == "--meta") {
+        binding.command = true;
+        continue;
+      }
+      const std::string key_prefix = "--key=";
+      if (token.rfind(key_prefix, 0) == 0) {
+        binding.key = token.substr(key_prefix.size());
+        continue;
+      }
+      if (token == "--key") {
+        stream >> binding.key;
+        continue;
+      }
+      return "ERR unknown unbind flag\n";
+    }
+    binding.key = Trim(binding.key);
+    if (binding.key.empty()) {
+      return "ERR unbind requires --key\n";
+    }
+    bool success = RunOnUiAndWait([binding]() {
+      return KeyBindingManager::Get()->RemoveBinding(binding);
+    });
+    if (!success) {
+      return "ERR failed to remove binding\n";
+    }
+    return "OK\n";
+  }
+
   if (op == "open") {
     std::string rest;
     std::getline(stream, rest);

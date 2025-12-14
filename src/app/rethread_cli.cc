@@ -15,7 +15,13 @@ namespace {
 void PrintCliUsage() {
   std::cout << "Usage:\n"
             << "  rethread tabs [--user-data-dir=PATH] <command>\n"
-            << "    Interact with a running instance (list, switch, open, tabstrip ...).\n"
+            << "    Interact with a running instance (list, switch, cycle, open ...).\n"
+            << "  rethread bind [--user-data-dir=PATH] [mods] --key=K -- command\n"
+            << "    Register a key binding that runs `command`.\n"
+            << "  rethread unbind [--user-data-dir=PATH] [mods] --key=K\n"
+            << "    Remove the matching key binding.\n"
+            << "  rethread tabstrip [--user-data-dir=PATH] show|hide|toggle|peek <ms>\n"
+            << "    Control the tab strip overlay.\n"
             << "  rethread browser [options]\n"
             << "    Launch the browser UI (same flags as rethread-browser).\n";
 }
@@ -71,8 +77,30 @@ int main(int argc, char* argv[]) {
     return rethread::RunTabCli(argc - 2, argv + 2,
                                rethread::DefaultUserDataDir());
   }
+  if (command == "bind") {
+    return rethread::RunBindCli(argc - 2, argv + 2,
+                                rethread::DefaultUserDataDir());
+  }
+  if (command == "unbind") {
+    return rethread::RunUnbindCli(argc - 2, argv + 2,
+                                  rethread::DefaultUserDataDir());
+  }
+  if (command == "tabstrip") {
+    return rethread::RunTabStripCli(argc - 2, argv + 2,
+                                    rethread::DefaultUserDataDir());
+  }
 
   if (command == "browser") {
+    if (argc >= 3) {
+      std::string next = argv[2];
+      if (next == "tabs" || next == "bind" || next == "unbind" ||
+          next == "tabstrip") {
+        std::cerr << "`rethread browser " << next
+                  << "` is not supported. Use `rethread " << next << " ...` "
+                  << "instead.\n";
+        return 1;
+      }
+    }
     return ExecBrowser(argc, argv);
   }
 

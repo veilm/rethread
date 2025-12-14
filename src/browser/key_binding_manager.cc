@@ -52,6 +52,35 @@ bool KeyBindingManager::AddBinding(Binding binding) {
   return true;
 }
 
+bool KeyBindingManager::RemoveBinding(const Binding& binding) {
+  CEF_REQUIRE_UI_THREAD();
+  if (binding.key.empty()) {
+    return false;
+  }
+  Binding normalized = binding;
+  normalized.key = NormalizeKey(binding.key);
+
+  const size_t before = bindings_.size();
+  bindings_.erase(
+      std::remove_if(bindings_.begin(), bindings_.end(),
+                     [&](const Binding& existing) {
+                       return existing.key == normalized.key &&
+                              existing.alt == normalized.alt &&
+                              existing.ctrl == normalized.ctrl &&
+                              existing.shift == normalized.shift &&
+                              existing.command == normalized.command;
+                     }),
+      bindings_.end());
+  const size_t removed = before - bindings_.size();
+  AppendDebugLog("Removed " + std::to_string(removed) +
+                 " key binding(s) for key=" + normalized.key +
+                 " alt=" + std::to_string(normalized.alt) +
+                 " ctrl=" + std::to_string(normalized.ctrl) +
+                 " shift=" + std::to_string(normalized.shift) +
+                 " command=" + std::to_string(normalized.command));
+  return true;
+}
+
 std::string KeyBindingManager::ExtractKeyLabel(const CefKeyEvent& event) const {
   if (IsPrintable(event.unmodified_character)) {
     std::string label(1, static_cast<char>(event.unmodified_character));
