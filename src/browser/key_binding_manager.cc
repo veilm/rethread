@@ -119,6 +119,12 @@ QString KeyBindingManager::ExtractKeyLabel(QKeyEvent* event) const {
   if (key == Qt::Key_Tab) {
     return QStringLiteral("tab");
   }
+  if (key == Qt::Key_Left) {
+    return QStringLiteral("left");
+  }
+  if (key == Qt::Key_Right) {
+    return QStringLiteral("right");
+  }
   return QString();
 }
 

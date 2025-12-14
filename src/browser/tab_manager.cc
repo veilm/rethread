@@ -9,6 +9,7 @@
 #include <QSizePolicy>
 #include <QStackedWidget>
 #include <QUrl>
+#include <QWebEngineHistory>
 #include <QWebEngineProfile>
 #include <QWebEnginePage>
 #include <QWebEngineScript>
@@ -221,6 +222,32 @@ void TabManager::closeAllTabs() {
   while (!tabs_.empty()) {
     closeTabAtIndex(0);
   }
+}
+
+bool TabManager::historyBack() {
+  QWebEngineView* view = activeView();
+  if (!view) {
+    return false;
+  }
+  QWebEngineHistory* history = view->history();
+  if (!history || !history->canGoBack()) {
+    return false;
+  }
+  history->back();
+  return true;
+}
+
+bool TabManager::historyForward() {
+  QWebEngineView* view = activeView();
+  if (!view) {
+    return false;
+  }
+  QWebEngineHistory* history = view->history();
+  if (!history || !history->canGoForward()) {
+    return false;
+  }
+  history->forward();
+  return true;
 }
 
 QWebEngineView* TabManager::activeView() const {
