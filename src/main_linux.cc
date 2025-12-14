@@ -6,7 +6,6 @@
 #include <filesystem>
 #include <iostream>
 #include <string>
-#include <unordered_set>
 
 #include "include/cef_app.h"
 
@@ -161,8 +160,7 @@ CliOptions ParseCliOptions(int argc, char* argv[]) {
 void PrintHelp() {
   std::cout
       << "Usage:\n"
-      << "  rethread [options]\n"
-      << "  rethread tabs [--user-data-dir=PATH] <command>\n"
+      << "  rethread browser [options]\n"
       << "\n"
       << "Browser options:\n"
       << "  --help, -h              Show this help and exit.\n"
@@ -178,24 +176,7 @@ void PrintHelp() {
       << "  --auto-exit=SECONDS     Quit automatically after SECONDS (best effort,\n"
       << "                          useful for automation).\n"
       << "  --startup-script=PATH   Run PATH after launch (defaults to "
-      << rethread::DefaultStartupScriptPath() << ").\n"
-      << "\n"
-      << "Tab/IPC commands:\n"
-      << "  rethread tabs list      Print the currently open tabs (alias: get).\n"
-      << "  rethread tabs switch <id>\n"
-      << "                          Focus the tab with numeric id <id>.\n"
-      << "  rethread tabs open <url>\n"
-      << "                          Open <url> in a new tab.\n"
-      << "  rethread bind [mods] --key=K -- command\n"
-      << "                          Register a key binding that runs `command`.\n"
-      << "  --user-data-dir works the same here to pick which profile/socket to\n"
-      << "  talk to if you have multiple instances.\n";
-}
-
-bool IsTabCommand(const std::string& arg) {
-  static const std::unordered_set<std::string> kTabCommands = {
-      "bind", "cycle", "get", "list", "open", "switch", "tabstrip"};
-  return kTabCommands.find(arg) != kTabCommands.end();
+      << rethread::DefaultStartupScriptPath() << ").\n";
 }
 
 #if defined(CEF_X11)
@@ -241,18 +222,6 @@ using rethread::TabIpcServer;
 
 NO_STACK_PROTECTOR
 int main(int argc, char* argv[]) {
-  if (argc >= 2) {
-    std::string first = argv[1];
-    if (first == "tabs") {
-      return rethread::RunTabCli(argc - 2, argv + 2,
-                                 rethread::DefaultUserDataDir());
-    }
-    if (IsTabCommand(first)) {
-      return rethread::RunTabCli(argc - 1, argv + 1,
-                                 rethread::DefaultUserDataDir());
-    }
-  }
-
   CliOptions cli_options = ParseCliOptions(argc, argv);
   if (cli_options.show_help) {
     PrintHelp();
