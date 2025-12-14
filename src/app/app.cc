@@ -99,8 +99,7 @@ void BrowserApplication::InitializeControllers() {
       std::make_unique<TabStripController>(main_window_->tabStripOverlay());
   QObject::connect(
       tab_manager_.get(), &TabManager::tabsChanged,
-      tab_strip_controller_.get(), &TabStripController::SetTabs,
-      Qt::QueuedConnection);
+      tab_strip_controller_.get(), &TabStripController::SetTabs);
   QObject::connect(tab_manager_.get(), &TabManager::allTabsClosed, this, []() {
     QCoreApplication::quit();
   });

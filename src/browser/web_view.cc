@@ -7,6 +7,8 @@
 #include <QStringList>
 #include <QTimer>
 #include <QUrl>
+#include <QVariant>
+#include <QtGlobal>
 
 namespace rethread {
 namespace {
@@ -16,6 +18,17 @@ constexpr int kTypeFlagLink = 1 << 2;
 constexpr int kTypeFlagMedia = 1 << 3;
 constexpr int kTypeFlagSelection = 1 << 4;
 constexpr int kTypeFlagEditable = 1 << 5;
+QUrl FrameUrlForRequest(const QWebEngineContextMenuRequest* request) {
+  if (!request) {
+    return QUrl();
+  }
+  QVariant value = request->property("frameUrl");
+  if (value.canConvert<QUrl>()) {
+    return value.toUrl();
+  }
+  return QUrl();
+}
+
 }  // namespace
 
 WebView::WebView(const QString& menu_command,
@@ -82,6 +95,11 @@ QString WebView::BuildMenuPayload(
   if (request->mediaUrl().isValid()) {
     lines << QStringLiteral("source_url=%1").arg(
         EncodeField(request->mediaUrl().toString()));
+  }
+  const QUrl frame_url = FrameUrlForRequest(request);
+  if (frame_url.isValid()) {
+    lines << QStringLiteral("frame_url=%1").arg(
+        EncodeField(frame_url.toString()));
   }
   if (!url().isEmpty()) {
     lines << QStringLiteral("page_url=%1").arg(
