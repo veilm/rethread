@@ -51,7 +51,7 @@ class TabManager : public QObject {
                           int tab_id,
                           int tab_index,
                           QVariant* result,
-                          QString* error_message) const;
+                          QString* error_message);
 
   QWebEngineView* activeView() const;
   QWebEngineProfile* profile() const { return profile_; }

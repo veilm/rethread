@@ -322,7 +322,7 @@ bool TabManager::EvaluateJavaScript(const QString& script,
                                     int tab_id,
                                     int tab_index,
                                     QVariant* result,
-                                    QString* error_message) const {
+                                    QString* error_message) {
   if (tabs_.empty()) {
     if (error_message) {
       *error_message = QStringLiteral("no tabs available");
@@ -370,6 +370,14 @@ bool TabManager::EvaluateJavaScript(const QString& script,
   QEventLoop loop;
   QVariant callback_result;
   bool callback_invoked = false;
+  QWebEngineView* view = target->view;
+  if (!view) {
+    if (error_message) {
+      *error_message = QStringLiteral("tab has no view");
+    }
+    return false;
+  }
+
   const QString wrapper = QStringLiteral(
       "(function(){"
       "  try {"
@@ -381,8 +389,9 @@ bool TabManager::EvaluateJavaScript(const QString& script,
       "})()")
                               .arg(QuoteForJsString(script));
 
-  target->view->page()->runJavaScript(
-      wrapper, [&loop, &callback_result, &callback_invoked](const QVariant& value) {
+  view->page()->runJavaScript(
+      wrapper, QWebEngineScript::ApplicationWorld,
+      [&loop, &callback_result, &callback_invoked](const QVariant& value) {
         callback_invoked = true;
         callback_result = value;
         loop.quit();

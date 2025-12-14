@@ -10,6 +10,7 @@
 #include <QTimer>
 #include <QUrl>
 #include <QWebEngineProfile>
+#include <QWebEngineSettings>
 
 #include "browser/command_dispatcher.h"
 #include "browser/key_binding_manager.h"
@@ -86,6 +87,10 @@ void BrowserApplication::InitializeProfile() {
   profile_->setPersistentCookiesPolicy(
       QWebEngineProfile::AllowPersistentCookies);
   profile_->setSpellCheckEnabled(false);
+  if (profile_->settings()) {
+    profile_->settings()->setAttribute(
+        QWebEngineSettings::ScrollAnimatorEnabled, true);
+  }
 }
 
 void BrowserApplication::InitializeUi() {
