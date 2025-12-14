@@ -116,7 +116,7 @@ QString KeyBindingManager::ExtractKeyLabel(QKeyEvent* event) const {
     const QChar letter('a' + (key - Qt::Key_A));
     return QString(letter);
   }
-  if (key == Qt::Key_Tab) {
+  if (key == Qt::Key_Tab || key == Qt::Key_Backtab) {
     return QStringLiteral("tab");
   }
   if (key == Qt::Key_Left) {
