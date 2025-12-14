@@ -152,6 +152,58 @@ CefRefPtr<CefBrowser> TabManager::GetActiveBrowser() const {
   return nullptr;
 }
 
+bool TabManager::CloseTabAtIndex(int index) {
+  CEF_REQUIRE_UI_THREAD();
+  const int count = static_cast<int>(tabs_.size());
+  if (index < 0 || index >= count) {
+    return false;
+  }
+
+  auto it = tabs_.begin() + index;
+  CefRefPtr<CefBrowserView> view = (*it)->view;
+  CefRefPtr<CefBrowser> browser = view ? view->GetBrowser() : nullptr;
+  bool was_active = (*it)->active;
+
+  if (content_panel_ && view) {
+    content_panel_->RemoveChildView(view);
+  }
+
+  tabs_.erase(it);
+
+  if (!tabs_.empty()) {
+    if (was_active) {
+      int new_index = index;
+      if (new_index >= static_cast<int>(tabs_.size())) {
+        new_index = static_cast<int>(tabs_.size()) - 1;
+      }
+      for (size_t i = 0; i < tabs_.size(); ++i) {
+        tabs_[i]->active = (static_cast<int>(i) == new_index);
+      }
+    }
+  }
+
+  ApplyActiveState();
+  UpdateTabStrip();
+
+  if (browser) {
+    browser->GetHost()->CloseBrowser(false);
+  }
+  return true;
+}
+
+bool TabManager::CloseActiveTab() {
+  CEF_REQUIRE_UI_THREAD();
+  for (size_t i = 0; i < tabs_.size(); ++i) {
+    if (tabs_[i]->active) {
+      return CloseTabAtIndex(static_cast<int>(i));
+    }
+  }
+  if (!tabs_.empty()) {
+    return CloseTabAtIndex(0);
+  }
+  return false;
+}
+
 void TabManager::CloseAllTabs(bool force_close) {
   CEF_REQUIRE_UI_THREAD();
   for (const auto& tab : tabs_) {

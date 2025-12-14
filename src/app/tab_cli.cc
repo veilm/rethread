@@ -22,6 +22,8 @@ void PrintTabUsage() {
          "  switch <id>           Activate the tab with the given id.\n"
          "  cycle <delta>         Move relative tab focus.\n"
          "  open <url>            Open a new tab with the URL.\n"
+         "  close [index]         Close the tab at 1-based index or the active "
+         "tab if omitted.\n"
          "\n"
          "Use `rethread bind ...` / `rethread unbind ...` for key bindings and\n"
          "`rethread tabstrip ...` to control the overlay.\n";
@@ -239,6 +241,16 @@ int RunTabCli(int argc, char* argv[], const std::string& default_user_data_dir) 
         payload << " ";
       }
       payload << argv[i];
+    }
+    payload << "\n";
+  } else if (cmd == "close") {
+    payload << "close";
+    if (index < argc) {
+      payload << " " << argv[index++];
+      if (index < argc) {
+        std::cerr << "close accepts at most one tab index\n";
+        return 1;
+      }
     }
     payload << "\n";
   } else {
