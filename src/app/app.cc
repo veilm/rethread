@@ -1,6 +1,7 @@
 #include "app/app.h"
 
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QFile>
 #include <QDir>
 #include <QTextStream>
@@ -32,6 +33,12 @@ uint32_t QColorToRgba(const QColor& color) {
          (static_cast<uint32_t>(color.red()) << 16) |
          (static_cast<uint32_t>(color.green()) << 8) |
          static_cast<uint32_t>(color.blue());
+}
+
+QString ProfileStorageName(const QString& path) {
+  const QByteArray hash =
+      QCryptographicHash::hash(path.toUtf8(), QCryptographicHash::Sha1);
+  return QStringLiteral("rethread-%1").arg(QString::fromLatin1(hash.toHex()));
 }
 }  // namespace
 
@@ -78,7 +85,8 @@ void BrowserApplication::InitializeProfile() {
   }
   QDir().mkpath(options_.user_data_dir);
   QDir().mkpath(options_.user_data_dir + QStringLiteral("/cache"));
-  profile_ = new QWebEngineProfile(this);
+  profile_ = new QWebEngineProfile(ProfileStorageName(options_.user_data_dir),
+                                   this);
   profile_->setPersistentStoragePath(options_.user_data_dir);
   profile_->setCachePath(options_.user_data_dir + QStringLiteral("/cache"));
   profile_->setPersistentCookiesPolicy(
