@@ -23,6 +23,8 @@ class CommandDispatcher {
   QString HandleCycle(int delta) const;
   QString HandleClose(const QString& index_text) const;
   QString HandleOpen(const QString& url) const;
+  QString HandleHistoryBack() const;
+  QString HandleHistoryForward() const;
   QString HandleBind(const QString& args) const;
   QString HandleUnbind(const QString& args) const;
   QString HandleTabStrip(const QString& args) const;

@@ -155,6 +155,12 @@ QString CommandDispatcher::Execute(const QString& command) const {
     stream >> delta;
     return HandleCycle(delta);
   }
+  if (op == "history-back") {
+    return HandleHistoryBack();
+  }
+  if (op == "history-forward") {
+    return HandleHistoryForward();
+  }
   if (op == "close") {
     std::string rest;
     std::getline(stream, rest);
@@ -266,6 +272,26 @@ QString CommandDispatcher::HandleOpen(const QString& url) const {
   int id = tab_manager_->openTab(QUrl::fromUserInput(url), true);
   if (id <= 0) {
     return QStringLiteral("ERR failed to open tab\n");
+  }
+  return QString();
+}
+
+QString CommandDispatcher::HandleHistoryBack() const {
+  if (!tab_manager_) {
+    return QStringLiteral("ERR failed to go back\n");
+  }
+  if (!tab_manager_->historyBack()) {
+    return QStringLiteral("ERR no page to go back to\n");
+  }
+  return QString();
+}
+
+QString CommandDispatcher::HandleHistoryForward() const {
+  if (!tab_manager_) {
+    return QStringLiteral("ERR failed to go forward\n");
+  }
+  if (!tab_manager_->historyForward()) {
+    return QStringLiteral("ERR no page to go forward to\n");
   }
   return QString();
 }

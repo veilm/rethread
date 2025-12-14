@@ -14,3 +14,8 @@ rethread bind --ctrl --key tab "$E rethread tabs cycle 1 ; $peek"
 rethread bind --alt --key j "$E rethread tabs cycle 1 ; $peek"
 rethread bind --ctrl --shift --key tab "$E rethread tabs cycle -1 ; $peek"
 rethread bind --alt --key k "$E rethread tabs cycle -1 ; $peek"
+
+rethread bind --alt --key left "$E rethread tabs history-back ; $peek"
+rethread bind --alt --key h "$E rethread tabs history-back ; $peek"
+rethread bind --alt --key right "$E rethread tabs history-forward ; $peek"
+rethread bind --alt --key l "$E rethread tabs history-forward ; $peek"

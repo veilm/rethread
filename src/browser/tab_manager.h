@@ -45,6 +45,8 @@ class TabManager : public QObject {
   bool closeTabAtIndex(int index);
   bool closeActiveTab();
   void closeAllTabs();
+  bool historyBack();
+  bool historyForward();
   bool EvaluateJavaScript(const QString& script,
                           int tab_id,
                           int tab_index,

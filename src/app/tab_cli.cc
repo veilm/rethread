@@ -26,6 +26,8 @@ void PrintTabUsage() {
          "  switch <id>           Activate the tab with the given id.\n"
          "  cycle <delta>         Move relative tab focus.\n"
          "  open <url>            Open a new tab with the URL.\n"
+         "  history-back          Navigate back in the active tab.\n"
+         "  history-forward       Navigate forward in the active tab.\n"
          "  close [index]         Close the tab at 1-based index or the active "
          "tab if omitted.\n"
          "\n"
@@ -335,6 +337,10 @@ int RunTabCli(int argc, char* argv[], const std::string& default_user_data_dir) 
       payload << argv[i];
     }
     payload << "\n";
+  } else if (cmd == "history-back") {
+    payload << "history-back\n";
+  } else if (cmd == "history-forward") {
+    payload << "history-forward\n";
   } else if (cmd == "close") {
     payload << "close";
     if (index < argc) {
