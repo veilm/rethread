@@ -97,6 +97,36 @@ bool TabManager::ActivateTab(int id) {
   return true;
 }
 
+bool TabManager::CycleActiveTab(int delta) {
+  CEF_REQUIRE_UI_THREAD();
+  if (tabs_.empty()) {
+    return false;
+  }
+  if (delta == 0) {
+    return true;
+  }
+  int active_index = -1;
+  for (size_t i = 0; i < tabs_.size(); ++i) {
+    if (tabs_[i]->active) {
+      active_index = static_cast<int>(i);
+      break;
+    }
+  }
+  if (active_index < 0) {
+    active_index = 0;
+  }
+  const int count = static_cast<int>(tabs_.size());
+  int target_index = (active_index + delta) % count;
+  if (target_index < 0) {
+    target_index += count;
+  }
+  if (target_index == active_index) {
+    return true;
+  }
+  const int target_id = tabs_[target_index]->id;
+  return ActivateTab(target_id);
+}
+
 std::vector<TabManager::TabSnapshot> TabManager::GetTabs() const {
   CEF_REQUIRE_UI_THREAD();
   std::vector<TabSnapshot> snapshot;

@@ -42,6 +42,7 @@ class TabManager {
 
   int OpenTab(const std::string& url, bool activate);
   bool ActivateTab(int id);
+  bool CycleActiveTab(int delta);
   std::vector<TabSnapshot> GetTabs() const;
   CefRefPtr<CefBrowser> GetActiveBrowser() const;
   void CloseAllTabs(bool force_close);

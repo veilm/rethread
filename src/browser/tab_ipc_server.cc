@@ -459,6 +459,21 @@ std::string TabIpcServer::HandleCommand(const std::string& command) {
     return "OK\n";
   }
 
+  if (op == "cycle") {
+    int delta = 0;
+    if (!(stream >> delta)) {
+      return "ERR missing tab delta\n";
+    }
+    bool success = RunOnUiAndWait([delta]() {
+      auto* manager = TabManager::Get();
+      return manager->CycleActiveTab(delta);
+    });
+    if (!success) {
+      return "ERR failed to cycle tab\n";
+    }
+    return "OK\n";
+  }
+
   if (op == "open") {
     std::string rest;
     std::getline(stream, rest);

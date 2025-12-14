@@ -7,7 +7,6 @@ suppresses the default behavior). Exit 0/1 to let the key propagate.
 """
 
 import argparse
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -76,34 +75,14 @@ def _open_default_tab() -> bool:
     return _peek_tabstrip()
 
 
-def _fetch_tabs() -> Optional[List[dict]]:
-    output = _run_tabs_command(["list"], capture_output=True)
-    if not output:
-        return None
-    try:
-        payload = json.loads(output)
-    except json.JSONDecodeError:
-        return None
-    tabs = payload.get("tabs")
-    if not isinstance(tabs, list):
-        return None
-    return tabs
+def _cycle_tab(delta: int) -> bool:
+    if _run_tabs_command(["cycle", str(delta)]) is None:
+        return False
+    return _peek_tabstrip()
 
 
 def _switch_relative_tab(delta: int) -> bool:
-    tabs = _fetch_tabs()
-    if not tabs:
-        return False
-    active_index = next((i for i, tab in enumerate(tabs) if tab.get("active")), None)
-    if active_index is None:
-        return False
-    target_index = (active_index + delta) % len(tabs)
-    target_id = tabs[target_index].get("id")
-    if not target_id:
-        return False
-    if _run_tabs_command(["switch", str(target_id)]) is None:
-        return False
-    return _peek_tabstrip()
+    return _cycle_tab(delta)
 
 
 def _trigger_async_action(action: str) -> bool:
