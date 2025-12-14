@@ -8,6 +8,9 @@ namespace rethread {
 std::string DefaultUserDataDir();
 std::string DefaultConfigDir();
 std::string DefaultStartupScriptPath();
+std::string DefaultUserDataRoot();
+
+inline constexpr char kDefaultProfileName[] = "default";
 
 }  // namespace rethread
 

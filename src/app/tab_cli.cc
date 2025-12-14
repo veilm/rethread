@@ -13,12 +13,14 @@
 #include <cstdlib>
 #include <limits>
 
+#include "app/user_dirs.h"
+
 namespace rethread {
 namespace {
 
 void PrintTabUsage() {
   std::cerr
-      << "Usage: rethread tabs [--user-data-dir=PATH] <command>\n"
+      << "Usage: rethread tabs [--user-data-dir=PATH] [--profile=NAME] <command>\n"
          "Commands:\n"
          "  get|list              List open tabs.\n"
          "  switch <id>           Activate the tab with the given id.\n"
@@ -33,7 +35,8 @@ void PrintTabUsage() {
 
 void PrintBindUsage() {
   std::cerr
-      << "Usage: rethread bind [--user-data-dir=PATH] [mods] [--no-consume]\n"
+      << "Usage: rethread bind [--user-data-dir=PATH] [--profile=NAME]\n"
+      << "                     [mods] [--no-consume]\n"
       << "                      --key=K -- command...\n"
       << "Mods:\n"
       << "  --alt --ctrl --shift --command/--meta\n"
@@ -44,19 +47,20 @@ void PrintBindUsage() {
 
 void PrintUnbindUsage() {
   std::cerr
-      << "Usage: rethread unbind [--user-data-dir=PATH] [mods] --key=K\n"
+      << "Usage: rethread unbind [--user-data-dir=PATH] [--profile=NAME]\n"
+      << "                       [mods] --key=K\n"
       << "Mods:\n"
       << "  --alt --ctrl --shift --command/--meta\n";
 }
 
 void PrintTabStripUsage() {
-  std::cerr << "Usage: rethread tabstrip [--user-data-dir=PATH] "
+  std::cerr << "Usage: rethread tabstrip [--user-data-dir=PATH] [--profile=NAME] "
                "show|hide|toggle|peek <ms>\n";
 }
 
 void PrintEvalUsage() {
   std::cerr
-      << "Usage: rethread eval [--user-data-dir=PATH] [--stdin]\n"
+      << "Usage: rethread eval [--user-data-dir=PATH] [--profile=NAME] [--stdin]\n"
       << "                     [--tab-id=N|--tab-index=N] <script>\n"
       << "Options:\n"
       << "  --stdin              Read the script from stdin instead of argv\n"
@@ -140,13 +144,21 @@ bool ParseBindingOptions(int argc,
 
 bool ParseUserDataDir(int argc,
                       char* argv[],
+                      const std::string& default_root,
                       std::string* user_data_dir,
                       int* index) {
+  if (!user_data_dir || !index) {
+    return false;
+  }
+  bool user_data_override = false;
+  bool profile_specified = false;
+  std::string profile_name = rethread::kDefaultProfileName;
   for (; *index < argc; ++(*index)) {
     std::string arg = argv[*index];
     const std::string prefix = "--user-data-dir=";
     if (arg.rfind(prefix, 0) == 0) {
       *user_data_dir = arg.substr(prefix.size());
+      user_data_override = true;
       continue;
     }
     if (arg == "--user-data-dir") {
@@ -155,9 +167,37 @@ bool ParseUserDataDir(int argc,
         return false;
       }
       *user_data_dir = argv[++(*index)];
+      user_data_override = true;
+      continue;
+    }
+    const std::string profile_prefix = "--profile=";
+    if (arg.rfind(profile_prefix, 0) == 0) {
+      profile_name = arg.substr(profile_prefix.size());
+      profile_specified = true;
+      continue;
+    }
+    if (arg == "--profile") {
+      if (*index + 1 >= argc) {
+        std::cerr << "Missing value after --profile\n";
+        return false;
+      }
+      profile_name = argv[++(*index)];
+      profile_specified = true;
       continue;
     }
     break;
+  }
+  if (!user_data_override) {
+    std::string profile = profile_specified && !profile_name.empty()
+                              ? profile_name
+                              : rethread::kDefaultProfileName;
+    if (default_root.empty()) {
+      *user_data_dir = profile;
+    } else if (default_root.back() == '/' || default_root.back() == '\\') {
+      *user_data_dir = default_root + profile;
+    } else {
+      *user_data_dir = default_root + "/" + profile;
+    }
   }
   return true;
 }
@@ -233,9 +273,9 @@ std::string TabSocketPath(const std::string& user_data_dir) {
 }
 
 int RunTabCli(int argc, char* argv[], const std::string& default_user_data_dir) {
-  std::string user_data_dir = default_user_data_dir;
+  std::string user_data_dir;
   int index = 0;
-  if (!ParseUserDataDir(argc, argv, &user_data_dir, &index)) {
+  if (!ParseUserDataDir(argc, argv, default_user_data_dir, &user_data_dir, &index)) {
     return 1;
   }
   if (index < argc) {
@@ -306,9 +346,9 @@ int RunTabCli(int argc, char* argv[], const std::string& default_user_data_dir) 
 int RunBindCli(int argc,
                char* argv[],
                const std::string& default_user_data_dir) {
-  std::string user_data_dir = default_user_data_dir;
+  std::string user_data_dir;
   int index = 0;
-  if (!ParseUserDataDir(argc, argv, &user_data_dir, &index)) {
+  if (!ParseUserDataDir(argc, argv, default_user_data_dir, &user_data_dir, &index)) {
     return 1;
   }
   if (index < argc) {
@@ -373,9 +413,9 @@ int RunBindCli(int argc,
 int RunUnbindCli(int argc,
                  char* argv[],
                  const std::string& default_user_data_dir) {
-  std::string user_data_dir = default_user_data_dir;
+  std::string user_data_dir;
   int index = 0;
-  if (!ParseUserDataDir(argc, argv, &user_data_dir, &index)) {
+  if (!ParseUserDataDir(argc, argv, default_user_data_dir, &user_data_dir, &index)) {
     return 1;
   }
   if (index < argc) {
@@ -434,9 +474,9 @@ int RunUnbindCli(int argc,
 int RunEvalCli(int argc,
                char* argv[],
                const std::string& default_user_data_dir) {
-  std::string user_data_dir = default_user_data_dir;
+  std::string user_data_dir;
   int index = 0;
-  if (!ParseUserDataDir(argc, argv, &user_data_dir, &index)) {
+  if (!ParseUserDataDir(argc, argv, default_user_data_dir, &user_data_dir, &index)) {
     return 1;
   }
 
@@ -558,9 +598,9 @@ int RunEvalCli(int argc,
 int RunTabStripCli(int argc,
                    char* argv[],
                    const std::string& default_user_data_dir) {
-  std::string user_data_dir = default_user_data_dir;
+  std::string user_data_dir;
   int index = 0;
-  if (!ParseUserDataDir(argc, argv, &user_data_dir, &index)) {
+  if (!ParseUserDataDir(argc, argv, default_user_data_dir, &user_data_dir, &index)) {
     return 1;
   }
   if (index >= argc) {

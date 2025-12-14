@@ -14,16 +14,19 @@ namespace {
 
 void PrintCliUsage() {
   std::cout << "Usage:\n"
-            << "  rethread tabs [--user-data-dir=PATH] <command>\n"
+            << "  rethread tabs [--user-data-dir=PATH] [--profile=NAME] <command>\n"
             << "    Interact with a running instance (list, switch, cycle, open ...).\n"
-            << "  rethread eval [--user-data-dir=PATH] [--stdin]\n"
+            << "  rethread eval [--user-data-dir=PATH] [--profile=NAME] [--stdin]\n"
             << "                [--tab-id=N|--tab-index=N] <script>\n"
             << "    Evaluate JavaScript in a tab and print the JSON-encoded result.\n"
-            << "  rethread bind [--user-data-dir=PATH] [mods] --key=K -- command\n"
+            << "  rethread bind [--user-data-dir=PATH] [--profile=NAME]\n"
+            << "                [mods] --key=K -- command\n"
             << "    Register a key binding that runs `command`.\n"
-            << "  rethread unbind [--user-data-dir=PATH] [mods] --key=K\n"
+            << "  rethread unbind [--user-data-dir=PATH] [--profile=NAME]\n"
+            << "                  [mods] --key=K\n"
             << "    Remove the matching key binding.\n"
-            << "  rethread tabstrip [--user-data-dir=PATH] show|hide|toggle|peek <ms>\n"
+            << "  rethread tabstrip [--user-data-dir=PATH] [--profile=NAME]\n"
+            << "                    show|hide|toggle|peek <ms>\n"
             << "    Control the tab strip overlay.\n"
             << "  rethread browser [options]\n"
             << "    Launch the browser UI (same flags as rethread-browser).\n";
@@ -78,23 +81,23 @@ int main(int argc, char* argv[]) {
   std::string command = argv[1];
   if (command == "tabs") {
     return rethread::RunTabCli(argc - 2, argv + 2,
-                               rethread::DefaultUserDataDir());
+                               rethread::DefaultUserDataRoot());
   }
   if (command == "bind") {
     return rethread::RunBindCli(argc - 2, argv + 2,
-                                rethread::DefaultUserDataDir());
+                                rethread::DefaultUserDataRoot());
   }
   if (command == "unbind") {
     return rethread::RunUnbindCli(argc - 2, argv + 2,
-                                  rethread::DefaultUserDataDir());
+                                  rethread::DefaultUserDataRoot());
   }
   if (command == "tabstrip") {
     return rethread::RunTabStripCli(argc - 2, argv + 2,
-                                    rethread::DefaultUserDataDir());
+                                    rethread::DefaultUserDataRoot());
   }
   if (command == "eval") {
     return rethread::RunEvalCli(argc - 2, argv + 2,
-                                rethread::DefaultUserDataDir());
+                                rethread::DefaultUserDataRoot());
   }
 
   if (command == "browser") {
