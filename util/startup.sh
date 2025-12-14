@@ -1,13 +1,16 @@
 #!/bin/sh
-peek_cmd="rethread tabstrip peek 750"
+peek="rethread tabstrip peek 750"
 
-rethread bind --ctrl --key t "rethread tabs open 'https://veilm.github.io/rethread/' ; $peek_cmd"
-rethread bind --alt --shift --key o "rethread tabs open 'https://veilm.github.io/rethread/' ; $peek_cmd"
+# export command, to target this same profile
+E="export RETHREAD_USER_DATA_DIR=$RETHREAD_USER_DATA_DIR ;"
 
-rethread bind --ctrl --key w "rethread tabs close ; $peek_cmd"
-rethread bind --alt --key d "rethread tabs close ; $peek_cmd"
+rethread bind --ctrl --key t "$E rethread tabs open 'https://veilm.github.io/rethread/' ; $peek"
+rethread bind --alt --shift --key o "$E rethread tabs open 'https://veilm.github.io/rethread/' ; $peek"
 
-rethread bind --ctrl --key tab "rethread tabs cycle 1 ; $peek_cmd"
-rethread bind --alt --key j "rethread tabs cycle 1 ; $peek_cmd"
-rethread bind --ctrl --shift --key tab "rethread tabs cycle -1 ; $peek_cmd"
-rethread bind --alt --key k "rethread tabs cycle -1 ; $peek_cmd"
+rethread bind --ctrl --key w "$E rethread tabs close ; $peek"
+rethread bind --alt --key d "$E rethread tabs close ; $peek"
+
+rethread bind --ctrl --key tab "$E rethread tabs cycle 1 ; $peek"
+rethread bind --alt --key j "$E rethread tabs cycle 1 ; $peek"
+rethread bind --ctrl --shift --key tab "$E rethread tabs cycle -1 ; $peek"
+rethread bind --alt --key k "$E rethread tabs cycle -1 ; $peek"

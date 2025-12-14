@@ -153,6 +153,9 @@ bool ParseUserDataDir(int argc,
   bool user_data_override = false;
   bool profile_specified = false;
   std::string profile_name = rethread::kDefaultProfileName;
+  const char* env_dir = std::getenv("RETHREAD_USER_DATA_DIR");
+  const std::string env_user_data_dir =
+      (env_dir && env_dir[0] != '\0') ? std::string(env_dir) : std::string();
   for (; *index < argc; ++(*index)) {
     std::string arg = argv[*index];
     const std::string prefix = "--user-data-dir=";
@@ -188,15 +191,27 @@ bool ParseUserDataDir(int argc,
     break;
   }
   if (!user_data_override) {
-    std::string profile = profile_specified && !profile_name.empty()
-                              ? profile_name
-                              : rethread::kDefaultProfileName;
-    if (default_root.empty()) {
-      *user_data_dir = profile;
-    } else if (default_root.back() == '/' || default_root.back() == '\\') {
-      *user_data_dir = default_root + profile;
+    if (profile_specified) {
+      std::string profile = profile_name.empty() ? rethread::kDefaultProfileName
+                                                 : profile_name;
+      if (default_root.empty()) {
+        *user_data_dir = profile;
+      } else if (default_root.back() == '/' || default_root.back() == '\\') {
+        *user_data_dir = default_root + profile;
+      } else {
+        *user_data_dir = default_root + "/" + profile;
+      }
+    } else if (!env_user_data_dir.empty()) {
+      *user_data_dir = env_user_data_dir;
     } else {
-      *user_data_dir = default_root + "/" + profile;
+      std::string profile = rethread::kDefaultProfileName;
+      if (default_root.empty()) {
+        *user_data_dir = profile;
+      } else if (default_root.back() == '/' || default_root.back() == '\\') {
+        *user_data_dir = default_root + profile;
+      } else {
+        *user_data_dir = default_root + "/" + profile;
+      }
     }
   }
   return true;
