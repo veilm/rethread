@@ -462,7 +462,7 @@ std::string TabIpcServer::HandleCommand(const std::string& command) {
     if (!success) {
       return "ERR failed to switch tab\n";
     }
-    return "OK\n";
+    return std::string();
   }
 
   if (op == "cycle") {
@@ -477,7 +477,36 @@ std::string TabIpcServer::HandleCommand(const std::string& command) {
     if (!success) {
       return "ERR failed to cycle tab\n";
     }
-    return "OK\n";
+    return std::string();
+  }
+
+  if (op == "close") {
+    int index = 0;
+    if (stream >> index) {
+      std::string extra;
+      if (stream >> extra) {
+        return "ERR close accepts at most one index\n";
+      }
+      if (index <= 0) {
+        return "ERR close requires a positive tab index\n";
+      }
+      bool success = RunOnUiAndWait([index]() {
+        return TabManager::Get()->CloseTabAtIndex(index - 1);
+      });
+      if (!success) {
+        return "ERR failed to close tab\n";
+      }
+      return std::string();
+    }
+    if (!stream.eof()) {
+      return "ERR close requires a numeric index\n";
+    }
+    bool success = RunOnUiAndWait(
+        []() { return TabManager::Get()->CloseActiveTab(); });
+    if (!success) {
+      return "ERR failed to close tab\n";
+    }
+    return std::string();
   }
 
   if (op == "bind") {
@@ -546,7 +575,7 @@ std::string TabIpcServer::HandleCommand(const std::string& command) {
     if (!success) {
       return "ERR failed to add binding\n";
     }
-    return "OK\n";
+    return std::string();
   }
 
   if (op == "unbind") {
@@ -590,7 +619,7 @@ std::string TabIpcServer::HandleCommand(const std::string& command) {
     if (!success) {
       return "ERR failed to remove binding\n";
     }
-    return "OK\n";
+    return std::string();
   }
 
   if (op == "open") {
@@ -605,9 +634,7 @@ std::string TabIpcServer::HandleCommand(const std::string& command) {
     if (new_id <= 0) {
       return "ERR failed to open tab\n";
     }
-    std::ostringstream out;
-    out << "OK id=" << new_id << "\n";
-    return out.str();
+    return std::string();
   }
 
   if (op == "tabstrip") {
@@ -625,7 +652,7 @@ std::string TabIpcServer::HandleCommand(const std::string& command) {
       if (!success) {
         return "ERR failed to execute tabstrip action\n";
       }
-      return "OK\n";
+      return std::string();
     };
 
     if (action == "show") {
