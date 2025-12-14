@@ -60,6 +60,10 @@ rethread tabs tabstrip toggle
 
 # briefly show it for 400ms, then auto-hide
 rethread tabs tabstrip peek 400
+
+# switch to next/previous tab, then peek for 750ms
+rethread tabs cycle 1 && rethread tabs tabstrip peek 750
+rethread tabs cycle -1 && rethread tabs tabstrip peek 750
 ```
 
 `peek` always shows the overlay immediately and schedules a hide after the given

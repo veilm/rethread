@@ -19,6 +19,7 @@ void PrintTabUsage() {
                "Commands:\n"
                "  get|list              List open tabs.\n"
                "  switch <id>           Activate the tab with the given id.\n"
+               "  cycle <delta>         Move relative tab focus.\n"
                "  open <url>            Open a new tab with the URL.\n"
                "  tabstrip show|hide|toggle\n"
                "                        Control the tab strip overlay visibility.\n"
@@ -116,6 +117,12 @@ int RunTabCli(int argc, char* argv[], const std::string& default_user_data_dir) 
       return 1;
     }
     payload << "switch " << argv[index++] << "\n";
+  } else if (cmd == "cycle") {
+    if (index >= argc) {
+      std::cerr << "cycle requires a delta\n";
+      return 1;
+    }
+    payload << "cycle " << argv[index++] << "\n";
   } else if (cmd == "open") {
     if (index >= argc) {
       std::cerr << "open requires a URL\n";
