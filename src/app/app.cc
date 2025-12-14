@@ -2,12 +2,14 @@
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
-#include <QFile>
 #include <QDir>
-#include <QTextStream>
+#include <QFile>
+#include <QFileInfo>
+#include <QProcess>
+#include <QProcessEnvironment>
 #include <QTimer>
-#include <QWebEngineProfile>
 #include <QUrl>
+#include <QWebEngineProfile>
 
 #include "browser/command_dispatcher.h"
 #include "browser/key_binding_manager.h"
@@ -20,14 +22,6 @@
 
 namespace rethread {
 namespace {
-QString TrimmedLine(const QString& input) {
-  QString trimmed = input.trimmed();
-  if (trimmed.startsWith('#')) {
-    return QString();
-  }
-  return trimmed;
-}
-
 uint32_t QColorToRgba(const QColor& color) {
   return (static_cast<uint32_t>(color.alpha()) << 24) |
          (static_cast<uint32_t>(color.red()) << 16) |
@@ -137,25 +131,51 @@ void BrowserApplication::LoadInitialTab() {
 }
 
 void BrowserApplication::RunStartupScript() const {
-  if (!dispatcher_ || options_.startup_script_path.isEmpty()) {
+  if (options_.startup_script_path.isEmpty()) {
     return;
   }
-  QFile script(options_.startup_script_path);
-  if (!script.open(QIODevice::ReadOnly | QIODevice::Text)) {
+  QFileInfo info(options_.startup_script_path);
+  if (!info.exists() || !info.isFile()) {
+    AppendDebugLog("Startup script missing: " +
+                   options_.startup_script_path.toStdString());
     return;
   }
-  QTextStream stream(&script);
-  while (!stream.atEnd()) {
-    const QString raw_line = stream.readLine();
-    const QString line = TrimmedLine(raw_line);
-    if (line.isEmpty()) {
-      continue;
-    }
-    const QString response = dispatcher_->Execute(line);
-    if (!response.trimmed().isEmpty()) {
-      AppendDebugLog("startup cmd: " + line.toStdString() + " -> " +
-                     response.trimmed().toStdString());
-    }
+
+  QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+  if (!options_.user_data_dir.isEmpty()) {
+    env.insert(QStringLiteral("RETHREAD_USER_DATA_DIR"),
+               options_.user_data_dir);
+  }
+  if (!options_.tab_socket_path.isEmpty()) {
+    env.insert(QStringLiteral("RETHREAD_TAB_SOCKET"),
+               options_.tab_socket_path);
+  }
+
+  auto* process = new QProcess(const_cast<BrowserApplication*>(this));
+  process->setWorkingDirectory(options_.user_data_dir);
+  process->setProcessEnvironment(env);
+  QObject::connect(
+      process,
+      QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+      process,
+      [process](int exit_code, QProcess::ExitStatus status) {
+        if (status != QProcess::NormalExit || exit_code != 0) {
+          AppendDebugLog("Startup script exited with code " +
+                         std::to_string(exit_code));
+        }
+        process->deleteLater();
+      });
+  QObject::connect(process, &QProcess::errorOccurred, process,
+                   [process](QProcess::ProcessError error) {
+                     AppendDebugLog("Startup script process error " +
+                                    std::to_string(static_cast<int>(error)));
+                   });
+  process->start(QStringLiteral("/bin/sh"),
+                 {options_.startup_script_path});
+  if (!process->waitForStarted()) {
+    AppendDebugLog("Failed to start startup script: " +
+                   options_.startup_script_path.toStdString());
+    process->deleteLater();
   }
 }
 
