@@ -27,6 +27,7 @@ struct CliOptions {
   std::string initial_url = "https://veilm.github.io/rethread/";
   std::string startup_script_path;
   std::string profile_name = rethread::kDefaultProfileName;
+  bool profile_specified = false;
   int auto_exit_seconds = 0;
   uint32_t background_color = rethread::kDefaultBackgroundColor;
   bool user_data_dir_overridden = false;
@@ -114,10 +115,12 @@ CliOptions ParseCliOptions(int argc, char* argv[]) {
     const std::string profile_prefix = "--profile=";
     if (arg.rfind(profile_prefix, 0) == 0) {
       options.profile_name = arg.substr(profile_prefix.size());
+      options.profile_specified = true;
       continue;
     }
     if (arg == "--profile" && i + 1 < argc) {
       options.profile_name = argv[++i];
+      options.profile_specified = true;
       continue;
     }
 
@@ -172,15 +175,27 @@ CliOptions ParseCliOptions(int argc, char* argv[]) {
     }
   }
   if (!options.user_data_dir_overridden) {
-    std::string profile = options.profile_name;
-    if (profile.empty()) {
-      profile = rethread::kDefaultProfileName;
-    }
-    const std::string root = rethread::DefaultUserDataRoot();
-    if (root.empty()) {
-      options.user_data_dir = profile;
+    if (options.profile_specified) {
+      std::string profile = options.profile_name;
+      if (profile.empty()) {
+        profile = rethread::kDefaultProfileName;
+      }
+      const std::string root = rethread::DefaultUserDataRoot();
+      if (root.empty()) {
+        options.user_data_dir = profile;
+      } else if (!root.empty() &&
+                 (root.back() == '/' || root.back() == '\\')) {
+        options.user_data_dir = root + profile;
+      } else {
+        options.user_data_dir = root + "/" + profile;
+      }
     } else {
-      options.user_data_dir = root + "/" + profile;
+      const char* env_dir = std::getenv("RETHREAD_USER_DATA_DIR");
+      if (env_dir && env_dir[0] != '\0') {
+        options.user_data_dir = env_dir;
+      } else {
+        options.user_data_dir = rethread::DefaultUserDataDir();
+      }
     }
   }
   return options;
@@ -207,6 +222,9 @@ void PrintHelp() {
       << "  --startup-script=PATH   Run PATH after launch (defaults to\n"
       << "                          $XDG_CONFIG_HOME/rethread/startup.sh).\n"
       << "  --color-scheme=SCHEME   Force auto, light, or dark (default: dark).\n";
+  std::cout << "\nEnvironment:\n"
+            << "  RETHREAD_USER_DATA_DIR  Default profile directory when no flags\n"
+            << "                          override it.\n";
 }
 
 QColor ColorFromRgba(uint32_t rgba) {
