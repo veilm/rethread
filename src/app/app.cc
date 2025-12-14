@@ -1,5 +1,6 @@
 #include "app/app.h"
 
+#include <fstream>
 #include <string>
 
 #include "browser/client.h"
@@ -45,6 +46,37 @@ void PostAutoExitTask(int seconds) {
           }),
       seconds * 1000);
 }
+
+std::string Trim(const std::string& input) {
+  size_t start = input.find_first_not_of(" \t\r\n");
+  if (start == std::string::npos) {
+    return std::string();
+  }
+  size_t end = input.find_last_not_of(" \t\r\n");
+  return input.substr(start, end - start + 1);
+}
+
+void RunStartupScript(const std::string& path) {
+  if (path.empty()) {
+    return;
+  }
+  std::ifstream input(path);
+  if (!input.is_open()) {
+    return;
+  }
+  AppendDebugLog("Running startup script: " + path);
+  std::string line;
+  while (std::getline(input, line)) {
+    std::string trimmed = Trim(line);
+    if (trimmed.empty() || trimmed[0] == '#') {
+      continue;
+    }
+    std::string response = TabIpcServer::Get()->ExecuteCommand(trimmed);
+    if (!response.empty()) {
+      AppendDebugLog("startup cmd: " + trimmed + " -> " + Trim(response));
+    }
+  }
+}
 }  // namespace
 
 RethreadApp::RethreadApp(const Options& options) : options_(options) {}
@@ -83,6 +115,7 @@ void RethreadApp::OnContextInitialized() {
   if (!options_.tab_socket_path.empty()) {
     TabIpcServer::Get()->Start(options_.tab_socket_path);
   }
+  RunStartupScript(options_.startup_script_path);
   if (options_.auto_exit_seconds > 0) {
     AppendDebugLog("Auto-exit scheduled for " +
                    std::to_string(options_.auto_exit_seconds) + " seconds.");

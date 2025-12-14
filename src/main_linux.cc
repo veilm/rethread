@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <iostream>
 #include <string>
+#include <unordered_set>
 
 #include "include/cef_app.h"
 
@@ -33,6 +34,7 @@ struct CliOptions {
   uint32_t background_color = rethread::kDefaultBackgroundColor;
   std::string debug_log_path;
   int auto_exit_seconds = 0;
+  std::string startup_script_path;
 };
 
 bool ParseColorValue(const std::string& input, uint32_t* color) {
@@ -134,10 +136,23 @@ CliOptions ParseCliOptions(int argc, char* argv[]) {
       options.auto_exit_seconds = std::atoi(argv[++i]);
       continue;
     }
+
+    const std::string startup_prefix = "--startup-script=";
+    if (arg.rfind(startup_prefix, 0) == 0) {
+      options.startup_script_path = arg.substr(startup_prefix.size());
+      continue;
+    }
+    if (arg == "--startup-script" && i + 1 < argc) {
+      options.startup_script_path = argv[++i];
+      continue;
+    }
   }
 
   if (options.user_data_dir.empty()) {
     options.user_data_dir = rethread::DefaultUserDataDir();
+  }
+  if (options.startup_script_path.empty()) {
+    options.startup_script_path = rethread::DefaultStartupScriptPath();
   }
 
   return options;
@@ -162,16 +177,25 @@ void PrintHelp() {
       << "                          /tmp/rethread-debug.log).\n"
       << "  --auto-exit=SECONDS     Quit automatically after SECONDS (best effort,\n"
       << "                          useful for automation).\n"
+      << "  --startup-script=PATH   Run PATH after launch (defaults to "
+      << rethread::DefaultStartupScriptPath() << ").\n"
       << "\n"
       << "Tab/IPC commands:\n"
       << "  rethread tabs list      Print the currently open tabs (alias: get).\n"
       << "  rethread tabs switch <id>\n"
       << "                          Focus the tab with numeric id <id>.\n"
       << "  rethread tabs open <url>\n"
-      << "                          Open <url> in a new tab (remaining args are\n"
-      << "                          joined with spaces).\n"
+      << "                          Open <url> in a new tab.\n"
+      << "  rethread bind [mods] --key=K -- command\n"
+      << "                          Register a key binding that runs `command`.\n"
       << "  --user-data-dir works the same here to pick which profile/socket to\n"
       << "  talk to if you have multiple instances.\n";
+}
+
+bool IsTabCommand(const std::string& arg) {
+  static const std::unordered_set<std::string> kTabCommands = {
+      "bind", "cycle", "get", "list", "open", "switch", "tabstrip"};
+  return kTabCommands.find(arg) != kTabCommands.end();
 }
 
 #if defined(CEF_X11)
@@ -217,6 +241,17 @@ using rethread::TabIpcServer;
 
 NO_STACK_PROTECTOR
 int main(int argc, char* argv[]) {
+  if (argc >= 2) {
+    std::string first = argv[1];
+    if (first == "tabs") {
+      return rethread::RunTabCli(argc - 2, argv + 2,
+                                 rethread::DefaultUserDataDir());
+    }
+    if (IsTabCommand(first)) {
+      return rethread::RunTabCli(argc - 1, argv + 1,
+                                 rethread::DefaultUserDataDir());
+    }
+  }
 
   CliOptions cli_options = ParseCliOptions(argc, argv);
   if (cli_options.show_help) {

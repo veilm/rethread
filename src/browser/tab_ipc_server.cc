@@ -24,6 +24,7 @@
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
 
+#include "browser/key_binding_manager.h"
 #include "browser/tab_manager.h"
 #include "common/debug_log.h"
 
@@ -210,6 +211,10 @@ void TabIpcServer::Start(const std::string& socket_path) {
   running_.store(true, std::memory_order_release);
   stop_requested_.store(false, std::memory_order_release);
   thread_ = std::thread(&TabIpcServer::ThreadMain, this);
+}
+
+std::string TabIpcServer::ExecuteCommand(const std::string& command) {
+  return HandleCommand(command);
 }
 
 void TabIpcServer::Stop() {
@@ -471,6 +476,75 @@ std::string TabIpcServer::HandleCommand(const std::string& command) {
     });
     if (!success) {
       return "ERR failed to cycle tab\n";
+    }
+    return "OK\n";
+  }
+
+  if (op == "bind") {
+    KeyBindingManager::Binding binding;
+    std::string token;
+    std::string command_text;
+    while (stream >> token) {
+      if (token == "--") {
+        std::string rest;
+        std::getline(stream, rest);
+        command_text = Trim(rest);
+        break;
+      }
+      if (token == "--alt") {
+        binding.alt = true;
+        continue;
+      }
+      if (token == "--ctrl") {
+        binding.ctrl = true;
+        continue;
+      }
+      if (token == "--shift") {
+        binding.shift = true;
+        continue;
+      }
+      if (token == "--command" || token == "--meta") {
+        binding.command = true;
+        continue;
+      }
+      if (token == "--no-consume") {
+        binding.consume = false;
+        continue;
+      }
+      const std::string key_prefix = "--key=";
+      if (token.rfind(key_prefix, 0) == 0) {
+        binding.key = token.substr(key_prefix.size());
+        continue;
+      }
+      if (token == "--key") {
+        stream >> binding.key;
+        continue;
+      }
+      // Treat any unrecognized token as the start of the command text.
+      command_text = token;
+      std::string rest;
+      std::getline(stream, rest);
+      if (!rest.empty()) {
+        command_text += " " + Trim(rest);
+      }
+      break;
+    }
+
+    binding.key = Trim(binding.key);
+    command_text = Trim(command_text);
+
+    if (binding.key.empty()) {
+      return "ERR bind requires --key\n";
+    }
+    if (command_text.empty()) {
+      return "ERR bind requires a command after --\n";
+    }
+    binding.command_line = command_text;
+    bool success = RunOnUiAndWait([binding]() {
+      return KeyBindingManager::Get()->AddBinding(binding);
+    });
+    if (!success) {
+      return "ERR failed to add binding\n";
     }
     return "OK\n";
   }

@@ -6,6 +6,8 @@
 namespace rethread {
 
 std::string DefaultUserDataDir();
+std::string DefaultConfigDir();
+std::string DefaultStartupScriptPath();
 
 }  // namespace rethread
 

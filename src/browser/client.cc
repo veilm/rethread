@@ -6,9 +6,6 @@
 #include <sstream>
 #include <string>
 #include <vector>
-#if defined(OS_POSIX)
-#include <sys/wait.h>
-#endif
 
 #include "include/base/cef_callback.h"
 #include "include/cef_app.h"
@@ -19,6 +16,7 @@
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
 
+#include "browser/key_binding_manager.h"
 #include "browser/tab_ipc_server.h"
 #include "browser/tab_manager.h"
 #include "common/debug_log.h"
@@ -27,7 +25,6 @@
 namespace rethread {
 namespace {
 BrowserClient* g_browser_client = nullptr;
-constexpr char kKeyHandlerExecutable[] = "rethread-key-handler";
 
 std::string BuildDataUri(const std::string& data,
                          const std::string& mime_type) {
@@ -107,120 +104,6 @@ void LaunchMenuCommand(const std::string& command,
   std::system(full_command.str().c_str());
 }
 
-bool IsPrintable(int value) {
-  return value >= 32 && value <= 126;
-}
-
-const char* KeyEventTypeToString(cef_key_event_type_t type) {
-  switch (type) {
-    case KEYEVENT_RAWKEYDOWN:
-      return "rawkeydown";
-    case KEYEVENT_KEYDOWN:
-      return "keydown";
-    case KEYEVENT_KEYUP:
-      return "keyup";
-    case KEYEVENT_CHAR:
-      return "char";
-    default:
-      return "unknown";
-  }
-}
-
-void AppendModifierFlag(const CefKeyEvent& event,
-                        int flag,
-                        const char* name,
-                        std::vector<std::string>* args) {
-  if ((event.modifiers & flag) != 0) {
-    args->push_back(std::string("--") + name);
-  }
-}
-
-std::string ShellQuote(const std::string& value) {
-  std::string quoted = "'";
-  for (char c : value) {
-    if (c == '\'') {
-      quoted += "'\\''";
-    } else {
-      quoted += c;
-    }
-  }
-  quoted += "'";
-  return quoted;
-}
-
-bool RunKeyHandler(const CefKeyEvent& event) {
-  std::vector<std::string> args;
-  args.emplace_back(kKeyHandlerExecutable);
-  args.emplace_back("key");
-  args.emplace_back(std::string("--type=") + KeyEventTypeToString(event.type));
-  args.emplace_back("--windows-key-code=" +
-                    std::to_string(event.windows_key_code));
-  args.emplace_back("--native-key-code=" +
-                    std::to_string(event.native_key_code));
-  args.emplace_back("--modifiers=" + std::to_string(event.modifiers));
-
-  auto append_char_arg = [&args](const char* name, int value) {
-    if (value <= 0) {
-      return;
-    }
-    args.emplace_back(std::string("--") + name + "=" +
-                      std::to_string(value));
-  };
-  append_char_arg("character", event.character);
-  append_char_arg("unmodified-character", event.unmodified_character);
-
-  if (IsPrintable(event.unmodified_character)) {
-    std::string label(1, static_cast<char>(event.unmodified_character));
-    args.emplace_back(std::string("--key-label=") + label);
-  } else if (IsPrintable(event.character)) {
-    std::string label(1, static_cast<char>(event.character));
-    args.emplace_back(std::string("--key-label=") + label);
-  }
-
-  AppendModifierFlag(event, EVENTFLAG_CONTROL_DOWN, "ctrl", &args);
-  AppendModifierFlag(event, EVENTFLAG_SHIFT_DOWN, "shift", &args);
-  AppendModifierFlag(event, EVENTFLAG_ALT_DOWN, "alt", &args);
-  AppendModifierFlag(event, EVENTFLAG_COMMAND_DOWN, "command", &args);
-  AppendModifierFlag(event, EVENTFLAG_IS_REPEAT, "repeat", &args);
-
-  std::ostringstream command;
-  for (size_t i = 0; i < args.size(); ++i) {
-    if (i > 0) {
-      command << " ";
-    }
-    command << ShellQuote(args[i]);
-  }
-
-  int status = std::system(command.str().c_str());
-  if (status == -1) {
-    AppendDebugLog("Failed to execute key handler.");
-    return false;
-  }
-#if defined(OS_POSIX)
-  if (WIFEXITED(status)) {
-    const int exit_code = WEXITSTATUS(status);
-    if (exit_code == 2) {
-      return true;
-    }
-    if (exit_code != 0) {
-      AppendDebugLog("Key handler exited with code " +
-                     std::to_string(exit_code) + ".");
-    }
-    return false;
-  }
-  AppendDebugLog("Key handler terminated abnormally.");
-  return false;
-#else
-  if (status == 2) {
-    return true;
-  }
-  if (status != 0) {
-    AppendDebugLog("Key handler exited with code " + std::to_string(status) +
-                   ".");
-  }
-  return false;
-#endif
-}
 }  // namespace
 
 BrowserClient::BrowserClient(const Options& options) : options_(options) {
@@ -334,11 +217,14 @@ bool BrowserClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
     // the initial press and let the page consume repeats directly.
     return false;
   }
-  const bool handled = RunKeyHandler(event);
-  if (handled && is_keyboard_shortcut) {
+  auto result = KeyBindingManager::Get()->HandleKeyEvent(event);
+  if (!result.has_value()) {
+    return false;
+  }
+  if (result.value() && is_keyboard_shortcut) {
     *is_keyboard_shortcut = true;
   }
-  return handled;
+  return result.value();
 }
 
 bool BrowserClient::OnKeyEvent(CefRefPtr<CefBrowser> browser,
