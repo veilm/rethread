@@ -64,7 +64,7 @@ int TabManager::openTab(const QUrl& url, bool activate) {
   tab->active = tabs_.empty() || activate;
 
   auto* view = new WebView(menu_command_, background_color_);
-  auto* page = new WebPage(profile_, this);
+  auto* page = new WebPage(profile_, this, view);
   view->setPage(page);
   view->BindPageSignals(page);
   tab->view = view;
