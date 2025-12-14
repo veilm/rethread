@@ -15,6 +15,7 @@
 #include <QWebEngineScript>
 #include <QWebEngineView>
 
+#include "browser/context_menu_binding_manager.h"
 #include "browser/web_page.h"
 #include "browser/web_view.h"
 
@@ -67,20 +68,23 @@ void TabManager::setContainer(QStackedWidget* stack) {
   applyActiveState();
 }
 
-void TabManager::setMenuCommand(const QString& command) {
-  menu_command_ = command;
+void TabManager::setContextMenuBindingManager(
+    ContextMenuBindingManager* manager) {
+  context_menu_binding_manager_ = manager;
 }
 
-int TabManager::openTab(const QUrl& url, bool activate) {
+int TabManager::openTab(const QUrl& url, bool activate, bool append_to_end) {
   if (!profile_) {
     return -1;
   }
 
+  const int prior_active_index = activeIndex();
   auto tab = std::make_unique<TabEntry>();
   tab->id = nextTabId();
   tab->active = tabs_.empty() || activate;
 
-  auto* view = new WebView(menu_command_, background_color_);
+  auto* view =
+      new WebView(context_menu_binding_manager_, background_color_);
   auto* page = new WebPage(profile_, this, view);
   page->setBackgroundColor(background_color_);
   view->setPage(page);
@@ -119,7 +123,21 @@ int TabManager::openTab(const QUrl& url, bool activate) {
     }
   }
 
-  tabs_.push_back(std::move(tab));
+  size_t insert_index = tabs_.size();
+  if (!append_to_end && !tabs_.empty()) {
+    int target_index = prior_active_index;
+    if (target_index < 0) {
+      target_index = static_cast<int>(tabs_.size()) - 1;
+    }
+    insert_index = static_cast<size_t>(target_index + 1);
+    if (insert_index > tabs_.size()) {
+      insert_index = tabs_.size();
+    }
+  }
+  const auto insert_pos =
+      static_cast<std::vector<std::unique_ptr<TabEntry>>::difference_type>(
+          insert_index);
+  tabs_.insert(tabs_.begin() + insert_pos, std::move(tab));
   if (!url.isEmpty()) {
     view->setUrl(url);
   }

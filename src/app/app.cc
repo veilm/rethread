@@ -13,6 +13,7 @@
 #include <QWebEngineSettings>
 
 #include "browser/command_dispatcher.h"
+#include "browser/context_menu_binding_manager.h"
 #include "browser/key_binding_manager.h"
 #include "browser/main_window.h"
 #include "browser/tab_ipc_server.h"
@@ -96,7 +97,6 @@ void BrowserApplication::InitializeProfile() {
 void BrowserApplication::InitializeUi() {
   tab_manager_ =
       std::make_unique<TabManager>(profile_, options_.background_color);
-  tab_manager_->setMenuCommand(options_.menu_command);
   main_window_ = std::make_unique<MainWindow>(*tab_manager_);
   tab_manager_->setContainer(main_window_->tabStack());
 }
@@ -112,12 +112,18 @@ void BrowserApplication::InitializeControllers() {
   });
 
   key_binding_manager_ = std::make_unique<KeyBindingManager>();
+  context_menu_binding_manager_ =
+      std::make_unique<ContextMenuBindingManager>();
+  if (tab_manager_) {
+    tab_manager_->setContextMenuBindingManager(
+        context_menu_binding_manager_.get());
+  }
 }
 
 void BrowserApplication::InitializeIpc() {
   dispatcher_ = std::make_unique<CommandDispatcher>(
       tab_manager_.get(), key_binding_manager_.get(),
-      tab_strip_controller_.get());
+      context_menu_binding_manager_.get(), tab_strip_controller_.get());
 
   if (options_.tab_socket_path.isEmpty()) {
     return;

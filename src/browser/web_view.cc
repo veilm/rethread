@@ -4,11 +4,13 @@
 #include <QPalette>
 #include <QPoint>
 #include <QProcess>
-#include <QStringList>
+#include <QProcessEnvironment>
 #include <QTimer>
 #include <QUrl>
 #include <QVariant>
 #include <QtGlobal>
+
+#include "browser/context_menu_binding_manager.h"
 
 namespace rethread {
 namespace {
@@ -31,11 +33,11 @@ QUrl FrameUrlForRequest(const QWebEngineContextMenuRequest* request) {
 
 }  // namespace
 
-WebView::WebView(const QString& menu_command,
+WebView::WebView(ContextMenuBindingManager* context_menu_binding_manager,
                  const QColor& background,
                  QWidget* parent)
     : QWebEngineView(parent),
-      menu_command_(menu_command),
+      context_menu_binding_manager_(context_menu_binding_manager),
       background_color_(background) {
   QPalette pal = palette();
   pal.setColor(QPalette::Base, background_color_);
@@ -55,7 +57,7 @@ void WebView::BindPageSignals(QWebEnginePage* page) {
 void WebView::contextMenuEvent(QContextMenuEvent* event) {
   event->accept();
   const auto* request = lastContextMenuRequest();
-  if (!request || menu_command_.trimmed().isEmpty()) {
+  if (!request) {
     return;
   }
   RunMenuCommand(BuildMenuPayload(request));
@@ -77,43 +79,53 @@ void WebView::HandleLoadingChanged(const QWebEngineLoadingInfo& info) {
   setHtml(html, info.url());
 }
 
-QString WebView::BuildMenuPayload(
+WebView::MenuPayload WebView::BuildMenuPayload(
     const QWebEngineContextMenuRequest* request) const {
-  QStringList lines;
-  lines << QStringLiteral("type_flags=%1").arg(ComputeTypeFlags(request));
-  lines << QStringLiteral("x=%1").arg(request->position().x());
-  lines << QStringLiteral("y=%1").arg(request->position().y());
-  lines << QStringLiteral("editable=%1").arg(request->isContentEditable() ? 1 : 0);
+  MenuPayload payload;
+  PopulatePayloadFields(&payload, QStringLiteral("type_flags"),
+                        QString::number(ComputeTypeFlags(request)));
+  PopulatePayloadFields(&payload, QStringLiteral("x"),
+                        QString::number(request->position().x()));
+  PopulatePayloadFields(&payload, QStringLiteral("y"),
+                        QString::number(request->position().y()));
+  PopulatePayloadFields(
+      &payload, QStringLiteral("editable"),
+      QString::number(request->isContentEditable() ? 1 : 0));
   if (!request->selectedText().isEmpty()) {
-    lines << QStringLiteral("selection=%1").arg(
-        EncodeField(request->selectedText()));
+    PopulatePayloadFields(&payload, QStringLiteral("selection"),
+                          EncodeField(request->selectedText()));
   }
   if (request->linkUrl().isValid()) {
-    lines << QStringLiteral("link_url=%1").arg(
-        EncodeField(request->linkUrl().toString()));
+    PopulatePayloadFields(&payload, QStringLiteral("link_url"),
+                          EncodeField(request->linkUrl().toString()));
   }
   if (request->mediaUrl().isValid()) {
-    lines << QStringLiteral("source_url=%1").arg(
-        EncodeField(request->mediaUrl().toString()));
+    PopulatePayloadFields(&payload, QStringLiteral("source_url"),
+                          EncodeField(request->mediaUrl().toString()));
   }
   const QUrl frame_url = FrameUrlForRequest(request);
   if (frame_url.isValid()) {
-    lines << QStringLiteral("frame_url=%1").arg(
-        EncodeField(frame_url.toString()));
+    PopulatePayloadFields(&payload, QStringLiteral("frame_url"),
+                          EncodeField(frame_url.toString()));
   }
   if (!url().isEmpty()) {
-    lines << QStringLiteral("page_url=%1").arg(
-        EncodeField(url().toString()));
+    PopulatePayloadFields(&payload, QStringLiteral("page_url"),
+                          EncodeField(url().toString()));
   }
   if (request->mediaType() != QWebEngineContextMenuRequest::MediaTypeNone) {
-    lines << QStringLiteral("media_type=%1").arg(
-        static_cast<int>(request->mediaType()));
+    PopulatePayloadFields(&payload, QStringLiteral("media_type"),
+                          QString::number(static_cast<int>(request->mediaType())));
   }
-  return lines.join('\n') + '\n';
+  return payload;
 }
 
-void WebView::RunMenuCommand(const QString& payload) const {
-  if (menu_command_.trimmed().isEmpty()) {
+void WebView::RunMenuCommand(const MenuPayload& payload) const {
+  if (!context_menu_binding_manager_ ||
+      !context_menu_binding_manager_->HasBinding()) {
+    return;
+  }
+  const QString command = context_menu_binding_manager_->binding().trimmed();
+  if (command.isEmpty()) {
     return;
   }
   auto* process = new QProcess(const_cast<WebView*>(this));
@@ -122,13 +134,9 @@ void WebView::RunMenuCommand(const QString& payload) const {
                    process, &QObject::deleteLater);
   QObject::connect(process, &QProcess::errorOccurred, process,
                    [process](QProcess::ProcessError) { process->deleteLater(); });
-  QObject::connect(process, &QProcess::started, process,
-                   [process, payload]() {
-                     process->write(payload.toUtf8());
-                     process->closeWriteChannel();
-                   });
+  InjectMenuEnvironment(process, payload);
   process->start(QStringLiteral("/bin/sh"),
-                 {QStringLiteral("-c"), menu_command_});
+                 {QStringLiteral("-c"), command});
 }
 
 QString WebView::EncodeField(const QString& value) const {
@@ -159,6 +167,36 @@ int WebView::ComputeTypeFlags(
     flags |= kTypeFlagEditable;
   }
   return flags;
+}
+
+void WebView::PopulatePayloadFields(MenuPayload* payload,
+                                    const QString& key,
+                                    const QString& value) const {
+  if (!payload || value.isEmpty()) {
+    return;
+  }
+  payload->fields.push_back(std::make_pair(key, value));
+  payload->raw_payload.append(
+      QStringLiteral("%1=%2\n").arg(key, value));
+}
+
+void WebView::InjectMenuEnvironment(QProcess* process,
+                                    const MenuPayload& payload) const {
+  if (!process) {
+    return;
+  }
+  QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+  if (!payload.raw_payload.isEmpty()) {
+    env.insert(QStringLiteral("RETHREAD_CONTEXT_PAYLOAD"),
+               payload.raw_payload);
+  }
+  for (const auto& field : payload.fields) {
+    QString normalized = field.first.toUpper();
+    normalized.replace(QChar('-'), QChar('_'));
+    env.insert(QStringLiteral("RETHREAD_CONTEXT_%1").arg(normalized),
+               field.second);
+  }
+  process->setProcessEnvironment(env);
 }
 
 }  // namespace rethread
