@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include <QCoreApplication>
+#include <QSizePolicy>
 #include <QStackedWidget>
 #include <QUrl>
 #include <QWebEngineProfile>
@@ -40,6 +41,9 @@ void TabManager::setContainer(QStackedWidget* stack) {
       if (stack_->indexOf(tab->view) == -1) {
         stack_->addWidget(tab->view);
       }
+      tab->view->setSizePolicy(QSizePolicy::Expanding,
+                               QSizePolicy::Expanding);
+      tab->view->resize(stack_->size());
       tab->view->setVisible(tab->active);
     }
   }
@@ -87,6 +91,8 @@ int TabManager::openTab(const QUrl& url, bool activate) {
   if (stack_) {
     view->setParent(stack_);
     stack_->addWidget(view);
+    view->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    view->resize(stack_->size());
   }
 
   if (tab->active) {
