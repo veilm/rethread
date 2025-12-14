@@ -1,0 +1,65 @@
+#ifndef RETHREAD_APP_APP_H_
+#define RETHREAD_APP_APP_H_
+
+#include <memory>
+#include <optional>
+#include <string>
+
+#include <QColor>
+#include <QObject>
+#include <QString>
+
+class QWebEngineProfile;
+
+namespace rethread {
+
+class CommandDispatcher;
+class KeyBindingManager;
+class MainWindow;
+class TabIpcServer;
+class TabManager;
+class TabStripController;
+
+struct BrowserOptions {
+  QString user_data_dir;
+  QString initial_url;
+  QString startup_script_path;
+  QString debug_log_path;
+  QString tab_socket_path;
+  QString menu_command = QStringLiteral("menu x");
+  QColor background_color = QColor(0x33, 0x33, 0x33);
+  int auto_exit_seconds = 0;
+};
+
+class BrowserApplication : public QObject {
+  Q_OBJECT
+
+ public:
+  BrowserApplication(const BrowserOptions& options, QObject* parent = nullptr);
+  ~BrowserApplication() override;
+
+  bool Initialize();
+  QString ExecuteCommand(const QString& command) const;
+
+ private:
+  void InitializeProfile();
+  void InitializeUi();
+  void InitializeControllers();
+  void InitializeIpc();
+  void LoadInitialTab();
+  void RunStartupScript() const;
+  void ScheduleAutoExit();
+
+  BrowserOptions options_;
+  QWebEngineProfile* profile_ = nullptr;
+  std::unique_ptr<TabManager> tab_manager_;
+  std::unique_ptr<MainWindow> main_window_;
+  std::unique_ptr<TabStripController> tab_strip_controller_;
+  std::unique_ptr<KeyBindingManager> key_binding_manager_;
+  std::unique_ptr<CommandDispatcher> dispatcher_;
+  std::unique_ptr<TabIpcServer> ipc_server_;
+};
+
+}  // namespace rethread
+
+#endif  // RETHREAD_APP_APP_H_
