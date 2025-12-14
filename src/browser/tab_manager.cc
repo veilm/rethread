@@ -81,6 +81,7 @@ int TabManager::openTab(const QUrl& url, bool activate) {
 
   auto* view = new WebView(menu_command_, background_color_);
   auto* page = new WebPage(profile_, this, view);
+  page->setBackgroundColor(background_color_);
   view->setPage(page);
   view->BindPageSignals(page);
   tab->view = view;
