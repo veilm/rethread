@@ -6,6 +6,7 @@
 namespace rethread {
 
 class KeyBindingManager;
+class ContextMenuBindingManager;
 class TabManager;
 class TabStripController;
 
@@ -13,6 +14,7 @@ class CommandDispatcher {
  public:
   CommandDispatcher(TabManager* tab_manager,
                     KeyBindingManager* key_binding_manager,
+                    ContextMenuBindingManager* context_menu_binding_manager,
                     TabStripController* tab_strip_controller);
 
   QString Execute(const QString& command) const;
@@ -32,6 +34,7 @@ class CommandDispatcher {
 
   TabManager* tab_manager_;
   KeyBindingManager* key_binding_manager_;
+  ContextMenuBindingManager* context_menu_binding_manager_;
   TabStripController* tab_strip_controller_;
 };
 

@@ -12,6 +12,7 @@
 #include <QUrl>
 #include <QVariant>
 
+#include "browser/context_menu_binding_manager.h"
 #include "browser/key_binding_manager.h"
 #include "browser/tab_manager.h"
 #include "browser/tab_strip_controller.h"
@@ -127,9 +128,11 @@ QString VariantToJson(const QVariant& value) {
 
 CommandDispatcher::CommandDispatcher(TabManager* tab_manager,
                                      KeyBindingManager* key_binding_manager,
+                                     ContextMenuBindingManager* context_menu_binding_manager,
                                      TabStripController* tab_strip_controller)
     : tab_manager_(tab_manager),
       key_binding_manager_(key_binding_manager),
+      context_menu_binding_manager_(context_menu_binding_manager),
       tab_strip_controller_(tab_strip_controller) {}
 
 QString CommandDispatcher::Execute(const QString& command) const {
@@ -266,10 +269,42 @@ QString CommandDispatcher::HandleOpen(const QString& url) const {
   if (!tab_manager_) {
     return QStringLiteral("ERR failed to open tab\n");
   }
-  if (url.trimmed().isEmpty()) {
+  std::istringstream stream(Trim(url.toStdString()));
+  std::string token;
+  bool open_at_end = false;
+  bool saw_separator = false;
+  std::string url_text;
+  while (stream >> token) {
+    if (token == "--at-end") {
+      open_at_end = true;
+      continue;
+    }
+    if (token == "--") {
+      saw_separator = true;
+      break;
+    }
+    url_text = token;
+    std::string rest;
+    std::getline(stream, rest);
+    if (!rest.empty()) {
+      url_text += rest;
+    }
+    break;
+  }
+  if (saw_separator) {
+    std::string rest;
+    std::getline(stream, rest);
+    url_text = Trim(rest);
+  }
+  if (url_text.empty()) {
+    url_text = Trim(url.toStdString());
+  }
+  const QString normalized = QString::fromStdString(url_text).trimmed();
+  if (normalized.isEmpty()) {
     return QStringLiteral("ERR missing URL\n");
   }
-  int id = tab_manager_->openTab(QUrl::fromUserInput(url), true);
+  int id = tab_manager_->openTab(QUrl::fromUserInput(normalized), true,
+                                 open_at_end);
   if (id <= 0) {
     return QStringLiteral("ERR failed to open tab\n");
   }
@@ -297,14 +332,11 @@ QString CommandDispatcher::HandleHistoryForward() const {
 }
 
 QString CommandDispatcher::HandleBind(const QString& args) const {
-  if (!key_binding_manager_) {
-    return QStringLiteral("ERR bindings unavailable\n");
-  }
-
   std::istringstream stream(args.toStdString());
   KeyBindingManager::Binding binding;
   std::string token;
   std::string command_text;
+  bool context_menu = false;
   while (stream >> token) {
     if (token == "--") {
       std::string rest;
@@ -332,6 +364,10 @@ QString CommandDispatcher::HandleBind(const QString& args) const {
       binding.consume = false;
       continue;
     }
+    if (token == "--context-menu" || token == "--right-click") {
+      context_menu = true;
+      continue;
+    }
     const std::string key_prefix = "--key=";
     if (token.rfind(key_prefix, 0) == 0) {
       binding.key = QString::fromStdString(token.substr(key_prefix.size()));
@@ -353,6 +389,21 @@ QString CommandDispatcher::HandleBind(const QString& args) const {
     break;
   }
 
+  if (context_menu) {
+    if (!context_menu_binding_manager_) {
+      return QStringLiteral("ERR context menu bindings unavailable\n");
+    }
+    if (command_text.empty()) {
+      return QStringLiteral("ERR bind requires a command after --\n");
+    }
+    context_menu_binding_manager_->SetBinding(
+        QString::fromStdString(command_text));
+    return QString();
+  }
+
+  if (!key_binding_manager_) {
+    return QStringLiteral("ERR bindings unavailable\n");
+  }
   if (binding.key.trimmed().isEmpty()) {
     return QStringLiteral("ERR bind requires --key\n");
   }
@@ -367,12 +418,10 @@ QString CommandDispatcher::HandleBind(const QString& args) const {
 }
 
 QString CommandDispatcher::HandleUnbind(const QString& args) const {
-  if (!key_binding_manager_) {
-    return QStringLiteral("ERR bindings unavailable\n");
-  }
   std::istringstream stream(args.toStdString());
   KeyBindingManager::Binding binding;
   std::string token;
+  bool context_menu = false;
   while (stream >> token) {
     if (token == "--alt") {
       binding.alt = true;
@@ -390,6 +439,10 @@ QString CommandDispatcher::HandleUnbind(const QString& args) const {
       binding.command = true;
       continue;
     }
+    if (token == "--context-menu" || token == "--right-click") {
+      context_menu = true;
+      continue;
+    }
     const std::string key_prefix = "--key=";
     if (token.rfind(key_prefix, 0) == 0) {
       binding.key = QString::fromStdString(token.substr(key_prefix.size()));
@@ -403,6 +456,17 @@ QString CommandDispatcher::HandleUnbind(const QString& args) const {
       }
     }
     return QStringLiteral("ERR unknown unbind flag\n");
+  }
+  if (context_menu) {
+    if (!context_menu_binding_manager_) {
+      return QStringLiteral("ERR context menu bindings unavailable\n");
+    }
+    context_menu_binding_manager_->ClearBinding();
+    return QString();
+  }
+
+  if (!key_binding_manager_) {
+    return QStringLiteral("ERR bindings unavailable\n");
   }
   if (binding.key.trimmed().isEmpty()) {
     return QStringLiteral("ERR unbind requires --key\n");

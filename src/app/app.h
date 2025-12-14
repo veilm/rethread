@@ -14,6 +14,7 @@ class QWebEngineProfile;
 namespace rethread {
 
 class CommandDispatcher;
+class ContextMenuBindingManager;
 class KeyBindingManager;
 class MainWindow;
 class TabIpcServer;
@@ -32,7 +33,6 @@ struct BrowserOptions {
   QString startup_script_path;
   QString debug_log_path;
   QString tab_socket_path;
-  QString menu_command = QStringLiteral("menu x");
   QColor background_color = QColor(0x33, 0x33, 0x33);
   int auto_exit_seconds = 0;
   ColorScheme color_scheme = ColorScheme::kDark;
@@ -63,6 +63,7 @@ class BrowserApplication : public QObject {
   std::unique_ptr<MainWindow> main_window_;
   std::unique_ptr<TabStripController> tab_strip_controller_;
   std::unique_ptr<KeyBindingManager> key_binding_manager_;
+  std::unique_ptr<ContextMenuBindingManager> context_menu_binding_manager_;
   std::unique_ptr<CommandDispatcher> dispatcher_;
   std::unique_ptr<TabIpcServer> ipc_server_;
 };

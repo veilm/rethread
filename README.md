@@ -22,6 +22,8 @@ launch the UI and `rethread tabs ...` to talk to a running instance without
 reloading the Qt stack each time. After startup, the browser automatically runs
 `$XDG_CONFIG_HOME/rethread/startup.sh` (override with `--startup-script=PATH`)
 so you can pre-register keybindings or tweak state declaratively.
+`rethread tabs open` inserts the new tab immediately after the active tab; add
+`--at-end` to append to the end of the strip when you need the old behavior.
 
 ## key bindings
 
@@ -43,6 +45,31 @@ snippet works. Drop the same lines into
 `$XDG_CONFIG_HOME/rethread/startup.sh` to have them applied automatically on launch.
 Use `rethread unbind [mods] --key=...` to clear a binding and fall back to the
 browser's default behavior for that key combo.
+
+## right-click bindings
+
+Right clicks follow the same in-memory model. Bind the handler once and rethread
+will reuse it until exit:
+
+```
+# invoke the sample handler installed by install.sh
+rethread bind --context-menu "$XDG_CONFIG_HOME/rethread/right-click-handler.sh"
+```
+
+Any shell snippet works; it runs via `/bin/sh -c ...` with your profile exported
+just like the keyboard bindings. When the handler executes, the browser sets a
+few environment variables so the script knows what was under the cursor:
+
+- `RETHREAD_CONTEXT_PAYLOAD` reproduces the raw newline-delimited payload
+- `RETHREAD_CONTEXT_TYPE_FLAGS`, `RETHREAD_CONTEXT_X`, `RETHREAD_CONTEXT_Y`,
+  `RETHREAD_CONTEXT_EDITABLE`
+- `RETHREAD_CONTEXT_SELECTION`, `RETHREAD_CONTEXT_LINK_URL`,
+  `RETHREAD_CONTEXT_SOURCE_URL`, `RETHREAD_CONTEXT_FRAME_URL`,
+  `RETHREAD_CONTEXT_PAGE_URL`, `RETHREAD_CONTEXT_MEDIA_TYPE`
+
+The helper installed at `$XDG_CONFIG_HOME/rethread/right-click-handler.sh`
+demonstrates how to bridge those variables back into the historical `menu x`
+workflow, and `util/startup.sh` wires it up automatically when present.
 
 ## tab strip overlay
 

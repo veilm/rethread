@@ -17,6 +17,7 @@ class QWebEngineView;
 
 namespace rethread {
 
+class ContextMenuBindingManager;
 class WebView;
 
 class TabManager : public QObject {
@@ -36,9 +37,9 @@ class TabManager : public QObject {
   ~TabManager() override;
 
   void setContainer(QStackedWidget* stack);
-  void setMenuCommand(const QString& command);
+  void setContextMenuBindingManager(ContextMenuBindingManager* manager);
 
-  int openTab(const QUrl& url, bool activate);
+  int openTab(const QUrl& url, bool activate, bool append_to_end = false);
   bool activateTab(int id);
   bool cycleActiveTab(int delta);
   QList<TabSnapshot> snapshot() const;
@@ -81,7 +82,7 @@ class TabManager : public QObject {
 
   QWebEngineProfile* profile_ = nullptr;
   QColor background_color_;
-  QString menu_command_;
+  ContextMenuBindingManager* context_menu_binding_manager_ = nullptr;
   QStackedWidget* stack_ = nullptr;
   std::vector<std::unique_ptr<TabEntry>> tabs_;
   int next_tab_id_ = 1;

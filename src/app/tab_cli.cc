@@ -25,7 +25,7 @@ void PrintTabUsage() {
          "  get|list              List open tabs.\n"
          "  switch <id>           Activate the tab with the given id.\n"
          "  cycle <delta>         Move relative tab focus.\n"
-         "  open <url>            Open a new tab with the URL.\n"
+         "  open [--at-end] <url> Open a new tab (default inserts after the active tab).\n"
          "  history-back          Navigate back in the active tab.\n"
          "  history-forward       Navigate forward in the active tab.\n"
          "  close [index]         Close the tab at 1-based index or the active "
@@ -43,6 +43,7 @@ void PrintBindUsage() {
       << "Mods:\n"
       << "  --alt --ctrl --shift --command/--meta\n"
       << "Other flags:\n"
+      << "  --context-menu       Bind right-clicks to run `command`\n"
       << "  --no-consume          Allow the key event to pass through to the page\n"
       << "  --user-data-dir PATH  Target a specific profile/socket\n";
 }
@@ -52,7 +53,9 @@ void PrintUnbindUsage() {
       << "Usage: rethread unbind [--user-data-dir=PATH] [--profile=NAME]\n"
       << "                       [mods] --key=K\n"
       << "Mods:\n"
-      << "  --alt --ctrl --shift --command/--meta\n";
+      << "  --alt --ctrl --shift --command/--meta\n"
+      << "Other flags:\n"
+      << "  --context-menu       Clear the right-click binding\n";
 }
 
 void PrintTabStripUsage() {
@@ -77,6 +80,7 @@ struct BindingOptions {
   bool command = false;
   bool consume = true;
   std::string key;
+  bool context_menu = false;
 };
 
 bool ParseBindingOptions(int argc,
@@ -118,6 +122,11 @@ bool ParseBindingOptions(int argc,
     }
     if (allow_consume && arg == "--no-consume") {
       options->consume = false;
+      ++(*index);
+      continue;
+    }
+    if (arg == "--context-menu" || arg == "--right-click") {
+      options->context_menu = true;
       ++(*index);
       continue;
     }
@@ -325,18 +334,41 @@ int RunTabCli(int argc, char* argv[], const std::string& default_user_data_dir) 
     }
     payload << "cycle " << argv[index++] << "\n";
   } else if (cmd == "open") {
+    bool open_at_end = false;
+    while (index < argc) {
+      std::string arg = argv[index];
+      if (arg == "--at-end") {
+        open_at_end = true;
+        ++index;
+        continue;
+      }
+      if (arg == "--") {
+        ++index;
+        break;
+      }
+      break;
+    }
     if (index >= argc) {
       std::cerr << "open requires a URL\n";
       return 1;
     }
-    payload << "open ";
+    std::ostringstream url_stream;
     for (int i = index; i < argc; ++i) {
       if (i > index) {
-        payload << " ";
+        url_stream << " ";
       }
-      payload << argv[i];
+      url_stream << argv[i];
     }
-    payload << "\n";
+    const std::string url_text = url_stream.str();
+    if (url_text.empty()) {
+      std::cerr << "open requires a URL\n";
+      return 1;
+    }
+    payload << "open";
+    if (open_at_end) {
+      payload << " --at-end";
+    }
+    payload << " -- " << url_text << "\n";
   } else if (cmd == "history-back") {
     payload << "history-back\n";
   } else if (cmd == "history-forward") {
@@ -386,10 +418,19 @@ int RunBindCli(int argc,
     return 1;
   }
 
-  if (options.key.empty()) {
-    std::cerr << "bind requires --key\n";
-    PrintBindUsage();
-    return 1;
+  if (options.context_menu) {
+    if (!options.key.empty() || !options.consume || options.alt ||
+        options.ctrl || options.shift || options.command) {
+      std::cerr << "--context-menu cannot be combined with key or modifier flags\n";
+      PrintBindUsage();
+      return 1;
+    }
+  } else {
+    if (options.key.empty()) {
+      std::cerr << "bind requires --key\n";
+      PrintBindUsage();
+      return 1;
+    }
   }
   if (index >= argc) {
     std::cerr << "bind requires a command\n";
@@ -407,22 +448,26 @@ int RunBindCli(int argc,
 
   std::ostringstream payload;
   payload << "bind";
-  if (options.alt) {
-    payload << " --alt";
+  if (options.context_menu) {
+    payload << " --context-menu";
+  } else {
+    if (options.alt) {
+      payload << " --alt";
+    }
+    if (options.ctrl) {
+      payload << " --ctrl";
+    }
+    if (options.shift) {
+      payload << " --shift";
+    }
+    if (options.command) {
+      payload << " --command";
+    }
+    if (!options.consume) {
+      payload << " --no-consume";
+    }
+    payload << " --key=" << options.key;
   }
-  if (options.ctrl) {
-    payload << " --ctrl";
-  }
-  if (options.shift) {
-    payload << " --shift";
-  }
-  if (options.command) {
-    payload << " --command";
-  }
-  if (!options.consume) {
-    payload << " --no-consume";
-  }
-  payload << " --key=" << options.key;
   payload << " -- " << command_stream.str() << "\n";
 
   if (!SendCommand(TabSocketPath(user_data_dir), payload.str())) {
@@ -459,10 +504,19 @@ int RunUnbindCli(int argc,
     PrintUnbindUsage();
     return 1;
   }
-  if (options.key.empty()) {
-    std::cerr << "unbind requires --key\n";
-    PrintUnbindUsage();
-    return 1;
+  if (options.context_menu) {
+    if (!options.key.empty() || options.alt || options.ctrl ||
+        options.shift || options.command) {
+      std::cerr << "--context-menu cannot be combined with key or modifier flags\n";
+      PrintUnbindUsage();
+      return 1;
+    }
+  } else {
+    if (options.key.empty()) {
+      std::cerr << "unbind requires --key\n";
+      PrintUnbindUsage();
+      return 1;
+    }
   }
   if (index < argc) {
     std::cerr << "unbind does not accept extra arguments\n";
@@ -472,19 +526,24 @@ int RunUnbindCli(int argc,
 
   std::ostringstream payload;
   payload << "unbind";
-  if (options.alt) {
-    payload << " --alt";
+  if (options.context_menu) {
+    payload << " --context-menu";
+  } else {
+    if (options.alt) {
+      payload << " --alt";
+    }
+    if (options.ctrl) {
+      payload << " --ctrl";
+    }
+    if (options.shift) {
+      payload << " --shift";
+    }
+    if (options.command) {
+      payload << " --command";
+    }
+    payload << " --key=" << options.key;
   }
-  if (options.ctrl) {
-    payload << " --ctrl";
-  }
-  if (options.shift) {
-    payload << " --shift";
-  }
-  if (options.command) {
-    payload << " --command";
-  }
-  payload << " --key=" << options.key << "\n";
+  payload << "\n";
 
   if (!SendCommand(TabSocketPath(user_data_dir), payload.str())) {
     return 1;
