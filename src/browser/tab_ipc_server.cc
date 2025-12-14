@@ -59,8 +59,9 @@ auto RunOnUiAndWait(Func&& func) -> decltype(func()) {
           },
           result_holder, event, bound));
 
+  constexpr int kWaitIntervalMs = 1;
   while (true) {
-    if (event->TimedWait(50)) {
+    if (event->TimedWait(kWaitIntervalMs)) {
       break;
     }
     server = g_ipc_server;

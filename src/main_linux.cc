@@ -18,6 +18,7 @@
 #endif
 
 #include "app/tab_cli.h"
+#include "app/user_dirs.h"
 #include "browser/tab_ipc_server.h"
 #include "common/debug_log.h"
 #include "common/theme.h"
@@ -33,26 +34,6 @@ struct CliOptions {
   std::string debug_log_path;
   int auto_exit_seconds = 0;
 };
-
-std::string GetEnv(const char* key) {
-  const char* value = std::getenv(key);
-  if (!value) {
-    return std::string();
-  }
-  return std::string(value);
-}
-
-std::string DefaultUserDataDir() {
-  std::string base = GetEnv("XDG_DATA_HOME");
-  if (base.empty()) {
-    std::string home = GetEnv("HOME");
-    if (home.empty()) {
-      return "rethread";
-    }
-    base = home + "/.local/share";
-  }
-  return base + "/rethread";
-}
 
 bool ParseColorValue(const std::string& input, uint32_t* color) {
   if (!color || input.empty()) {
@@ -156,7 +137,7 @@ CliOptions ParseCliOptions(int argc, char* argv[]) {
   }
 
   if (options.user_data_dir.empty()) {
-    options.user_data_dir = DefaultUserDataDir();
+    options.user_data_dir = rethread::DefaultUserDataDir();
   }
 
   return options;
@@ -236,9 +217,6 @@ using rethread::TabIpcServer;
 
 NO_STACK_PROTECTOR
 int main(int argc, char* argv[]) {
-  if (argc >= 2 && std::string(argv[1]) == "tabs") {
-    return rethread::RunTabCli(argc - 2, argv + 2, DefaultUserDataDir());
-  }
 
   CliOptions cli_options = ParseCliOptions(argc, argv);
   if (cli_options.show_help) {
