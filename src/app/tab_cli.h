@@ -11,6 +11,7 @@ int RunUnbindCli(int argc, char* argv[], const std::string& default_user_data_di
 int RunTabStripCli(int argc, char* argv[],
                    const std::string& default_user_data_dir);
 int RunEvalCli(int argc, char* argv[], const std::string& default_user_data_dir);
+int RunRulesCli(int argc, char* argv[], const std::string& default_user_data_dir);
 
 std::string TabSocketPath(const std::string& user_data_dir);
 

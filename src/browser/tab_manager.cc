@@ -13,9 +13,11 @@
 #include <QWebEngineProfile>
 #include <QWebEnginePage>
 #include <QWebEngineScript>
+#include <QWebEngineSettings>
 #include <QWebEngineView>
 
 #include "browser/context_menu_binding_manager.h"
+#include "browser/rules_manager.h"
 #include "browser/web_page.h"
 #include "browser/web_view.h"
 
@@ -73,6 +75,21 @@ void TabManager::setContextMenuBindingManager(
   context_menu_binding_manager_ = manager;
 }
 
+void TabManager::setRulesManager(RulesManager* manager) {
+  if (rules_manager_ == manager) {
+    return;
+  }
+  if (rules_manager_) {
+    disconnect(rules_manager_, nullptr, this, nullptr);
+  }
+  rules_manager_ = manager;
+  if (rules_manager_) {
+    connect(rules_manager_, &RulesManager::javaScriptRulesChanged, this,
+            &TabManager::ApplyRulesToAllTabs);
+  }
+  ApplyRulesToAllTabs();
+}
+
 int TabManager::openTab(const QUrl& url, bool activate, bool append_to_end) {
   if (!profile_) {
     return -1;
@@ -106,6 +123,7 @@ int TabManager::openTab(const QUrl& url, bool activate, bool append_to_end) {
                        tab_ptr->title = tab_ptr->url;
                      }
                      notifyTabsChanged();
+                     ApplyRulesToView(tab_ptr->view, new_url);
                    });
   QObject::connect(page, &QWebEnginePage::windowCloseRequested, this,
                    [this, tab_id = tab->id]() { closeById(tab_id); });
@@ -138,6 +156,7 @@ int TabManager::openTab(const QUrl& url, bool activate, bool append_to_end) {
       static_cast<std::vector<std::unique_ptr<TabEntry>>::difference_type>(
           insert_index);
   tabs_.insert(tabs_.begin() + insert_pos, std::move(tab));
+  ApplyRulesToView(view, url);
   if (!url.isEmpty()) {
     view->setUrl(url);
   }
@@ -334,6 +353,27 @@ void TabManager::notifyTabsChanged() {
 
 int TabManager::nextTabId() {
   return next_tab_id_++;
+}
+
+void TabManager::ApplyRulesToView(WebView* view, const QUrl& url) const {
+  if (!view || !view->page() || !view->page()->settings()) {
+    return;
+  }
+  const bool disable =
+      rules_manager_ && rules_manager_->ShouldDisableJavaScript(url);
+  view->page()->settings()->setAttribute(
+      QWebEngineSettings::JavascriptEnabled, !disable);
+}
+
+void TabManager::ApplyRulesToAllTabs() const {
+  if (tabs_.empty()) {
+    return;
+  }
+  for (const auto& tab : tabs_) {
+    if (tab->view) {
+      ApplyRulesToView(tab->view, tab->view->url());
+    }
+  }
 }
 
 bool TabManager::EvaluateJavaScript(const QString& script,

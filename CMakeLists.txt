@@ -19,6 +19,7 @@ set(RETHREAD_BROWSER_SOURCES
     src/common/theme.cc
     src/browser/command_dispatcher.cc
     src/browser/context_menu_binding_manager.cc
+    src/browser/rules_manager.cc
     src/browser/key_binding_manager.cc
     src/browser/main_window.cc
     src/browser/tab_ipc_server.cc

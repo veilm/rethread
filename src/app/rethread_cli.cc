@@ -25,6 +25,8 @@ void PrintCliUsage() {
             << "  rethread unbind [--user-data-dir=PATH] [--profile=NAME]\n"
             << "                  [mods] --key=K\n"
             << "    Remove the matching key binding.\n"
+            << "  rethread rules [--user-data-dir=PATH] [--profile=NAME] ...\n"
+            << "    Manage per-site rules (e.g. load JS blocklists).\n"
             << "  rethread tabstrip [--user-data-dir=PATH] [--profile=NAME]\n"
             << "                    show|hide|toggle|peek <ms>\n"
             << "    Control the tab strip overlay.\n"
@@ -98,6 +100,10 @@ int main(int argc, char* argv[]) {
   if (command == "eval") {
     return rethread::RunEvalCli(argc - 2, argv + 2,
                                 rethread::DefaultUserDataRoot());
+  }
+  if (command == "rules") {
+    return rethread::RunRulesCli(argc - 2, argv + 2,
+                                 rethread::DefaultUserDataRoot());
   }
 
   if (command == "browser") {

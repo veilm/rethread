@@ -16,6 +16,7 @@
 #include "browser/context_menu_binding_manager.h"
 #include "browser/key_binding_manager.h"
 #include "browser/main_window.h"
+#include "browser/rules_manager.h"
 #include "browser/tab_ipc_server.h"
 #include "browser/tab_manager.h"
 #include "browser/tab_strip_controller.h"
@@ -114,16 +115,19 @@ void BrowserApplication::InitializeControllers() {
   key_binding_manager_ = std::make_unique<KeyBindingManager>();
   context_menu_binding_manager_ =
       std::make_unique<ContextMenuBindingManager>();
+  rules_manager_ = std::make_unique<RulesManager>();
   if (tab_manager_) {
     tab_manager_->setContextMenuBindingManager(
         context_menu_binding_manager_.get());
+    tab_manager_->setRulesManager(rules_manager_.get());
   }
 }
 
 void BrowserApplication::InitializeIpc() {
   dispatcher_ = std::make_unique<CommandDispatcher>(
       tab_manager_.get(), key_binding_manager_.get(),
-      context_menu_binding_manager_.get(), tab_strip_controller_.get());
+      context_menu_binding_manager_.get(), rules_manager_.get(),
+      tab_strip_controller_.get());
 
   if (options_.tab_socket_path.isEmpty()) {
     return;
