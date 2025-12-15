@@ -12,19 +12,36 @@ class RulesManager : public QObject {
   Q_OBJECT
 
  public:
+  enum class ListMode {
+    kAllowlist,
+    kBlacklist,
+  };
+
   explicit RulesManager(QObject* parent = nullptr);
 
-  bool LoadJavaScriptBlocklist(const QString& raw_text, int* host_count);
+  bool LoadJavaScriptRules(ListMode mode, const QString& raw_text, int* host_count);
+  bool LoadIframeRules(ListMode mode, const QString& raw_text, int* host_count);
+
   bool ShouldDisableJavaScript(const QUrl& url) const;
+  bool ShouldBlockIframe(const QUrl& top_level_url,
+                         const QUrl& frame_url) const;
 
  signals:
   void javaScriptRulesChanged();
 
  private:
-  QSet<QString> ParseHosts(const QString& raw_text) const;
-  QString ExtractHost(const QString& line) const;
+  struct HostRule {
+    ListMode mode = ListMode::kBlacklist;
+    bool configured = false;
+    QSet<QString> hosts;
+  };
 
-  QSet<QString> javascript_blocked_hosts_;
+  HostRule BuildRule(ListMode mode, const QString& raw_text) const;
+  QString NormalizeHost(const QString& input) const;
+  QString HostFromUrl(const QUrl& url) const;
+
+  HostRule javascript_rules_;
+  HostRule iframe_rules_;
 };
 
 }  // namespace rethread

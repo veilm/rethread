@@ -14,6 +14,8 @@
 
 #include "browser/command_dispatcher.h"
 #include "browser/context_menu_binding_manager.h"
+#include "browser/rules_manager.h"
+#include "browser/rules_request_interceptor.h"
 #include "browser/key_binding_manager.h"
 #include "browser/main_window.h"
 #include "browser/rules_manager.h"
@@ -41,7 +43,9 @@ QString ProfileStorageName(const QString& path) {
 
 BrowserApplication::BrowserApplication(const BrowserOptions& options,
                                        QObject* parent)
-    : QObject(parent), options_(options) {}
+    : QObject(parent), options_(options) {
+  rules_manager_ = std::make_unique<RulesManager>();
+}
 
 BrowserApplication::~BrowserApplication() {
   if (ipc_server_) {
@@ -93,6 +97,9 @@ void BrowserApplication::InitializeProfile() {
     profile_->settings()->setAttribute(
         QWebEngineSettings::ScrollAnimatorEnabled, true);
   }
+  rules_interceptor_ =
+      std::make_unique<RulesRequestInterceptor>(rules_manager_.get());
+  profile_->setUrlRequestInterceptor(rules_interceptor_.get());
 }
 
 void BrowserApplication::InitializeUi() {
@@ -115,7 +122,6 @@ void BrowserApplication::InitializeControllers() {
   key_binding_manager_ = std::make_unique<KeyBindingManager>();
   context_menu_binding_manager_ =
       std::make_unique<ContextMenuBindingManager>();
-  rules_manager_ = std::make_unique<RulesManager>();
   if (tab_manager_) {
     tab_manager_->setContextMenuBindingManager(
         context_menu_binding_manager_.get());

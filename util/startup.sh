@@ -35,4 +35,5 @@ rethread bind --alt --key p "$E echo \"window.location.href = '\$(wl-paste)'\" |
 rethread bind --alt --shift --key p "$E rethread tabs open \"\$(wl-paste)\" ; $peek"
 rethread bind --alt --key y "$E wl-copy \$(rethread tabs list | jq -r '.tabs[] | select(.active == true) | .url')"
 
-echo "archived.moe" | rethread rules load-js-blocklist
+echo "archived.moe" | rethread rules js --blacklist
+echo "google.com" | rethread rules iframes --whitelist

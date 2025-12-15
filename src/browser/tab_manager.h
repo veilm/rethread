@@ -87,7 +87,7 @@ class TabManager : public QObject {
   bool closeById(int id);
   void ApplyRulesToView(WebView* view, const QUrl& url) const;
   void ApplyRulesToAllTabs() const;
-  void CloseDevTools(QWebEnginePage* page);
+  void CloseDevTools(QWebEnginePage* page, bool close_view);
 
   QWebEngineProfile* profile_ = nullptr;
   QColor background_color_;
