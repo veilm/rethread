@@ -13,7 +13,7 @@ constexpr int kPadding = 12;
 constexpr int kRowSpacing = 6;
 constexpr int kActiveAlpha = 255;
 constexpr int kInactiveAlpha = 180;
-constexpr int kMaxDisplayLength = 80;
+constexpr int kTabMaxDisplayLength = 60;
 const QColor kBackgroundColor(32, 32, 32, 224);
 const QColor kActiveColor(255, 255, 255);
 const QColor kInactiveColor(200, 200, 200);
@@ -59,10 +59,10 @@ QSize TabStripOverlay::sizeHint() const {
 }
 
 QString TabStripOverlay::TruncateForDisplay(const QString& text) const {
-  if (text.size() <= kMaxDisplayLength) {
+  if (text.size() <= kTabMaxDisplayLength) {
     return text;
   }
-  const int prefix = std::max(0, kMaxDisplayLength - 3);
+  const int prefix = std::max(0, kTabMaxDisplayLength - 3);
   return text.left(prefix) + QStringLiteral("...");
 }
 
@@ -80,17 +80,12 @@ void TabStripOverlay::Rebuild() {
 
   if (showing_custom_message_) {
     for (const QString& line : custom_lines_) {
-      const QString trimmed = line.trimmed();
-      if (trimmed.isEmpty()) {
+      if (line.trimmed().isEmpty()) {
         continue;
       }
-      const QString display = TruncateForDisplay(trimmed);
-      auto* label = new QLabel(display, this);
+      auto* label = new QLabel(line, this);
       label->setAlignment(Qt::AlignCenter);
       label->setStyleSheet(QStringLiteral("font-size: 18px;"));
-      if (display != trimmed) {
-        label->setToolTip(trimmed);
-      }
       QPalette pal = label->palette();
       pal.setColor(QPalette::WindowText, kActiveColor);
       label->setPalette(pal);

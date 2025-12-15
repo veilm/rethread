@@ -76,9 +76,8 @@ void TabStripController::ShowMessage(const QStringList& lines, int milliseconds)
   }
   QStringList filtered;
   for (const QString& line : lines) {
-    const QString trimmed = line.trimmed();
-    if (!trimmed.isEmpty()) {
-      filtered.append(trimmed);
+    if (!line.isEmpty()) {
+      filtered.append(line);
     }
   }
   if (filtered.isEmpty()) {
