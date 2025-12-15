@@ -28,5 +28,5 @@ rethread bind --alt --key right "$E rethread tabs history-forward ; $peek"
 rethread bind --alt --key l "$E rethread tabs history-forward ; $peek"
 
 # navigate to url from wl-paste
-rethread bind --alt --key p "$E echo 'window.location.href = \"$(wl-paste)\"' | rethread eval --stdin ; $peek"
+rethread bind --alt --key p "$E echo \"window.location.href = '\$(wl-paste)'\" | rethread eval --stdin ; $peek"
 rethread bind --alt --shift --key p "$E rethread tabs open \"\$(wl-paste)\" ; $peek"
