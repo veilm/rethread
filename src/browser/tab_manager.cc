@@ -219,31 +219,35 @@ bool TabManager::closeTabAtIndex(int index) {
     return false;
   }
   auto it = tabs_.begin() + index;
-  const bool was_active = (*it)->active;
-  WebView* view = (*it)->view;
-  if (stack_ && view) {
-    stack_->removeWidget(view);
+  TabEntry* tab_to_close = it->get();
+  WebView* view_to_close = tab_to_close ? tab_to_close->view : nullptr;
+  const bool was_active = tab_to_close && tab_to_close->active;
+
+  if (was_active && tabs_.size() > 1) {
+    int replacement_index = (index + 1 < static_cast<int>(tabs_.size()))
+                                ? index + 1
+                                : index - 1;
+    for (size_t i = 0; i < tabs_.size(); ++i) {
+      tabs_[i]->active = (static_cast<int>(i) == replacement_index);
+    }
+    applyActiveState();
   }
-  if (view) {
-    view->deleteLater();
+
+  if (stack_ && view_to_close) {
+    stack_->removeWidget(view_to_close);
   }
+  if (view_to_close) {
+    view_to_close->deleteLater();
+  }
+
   tabs_.erase(it);
 
-  if (!tabs_.empty() && was_active) {
-    int new_index = index;
-    if (new_index >= static_cast<int>(tabs_.size())) {
-      new_index = static_cast<int>(tabs_.size()) - 1;
-    }
-    for (size_t i = 0; i < tabs_.size(); ++i) {
-      tabs_[i]->active = (static_cast<int>(i) == new_index);
-    }
-  }
-
-  applyActiveState();
-  notifyTabsChanged();
   if (tabs_.empty()) {
     emit allTabsClosed();
+  } else {
+    applyActiveState();
   }
+  notifyTabsChanged();
   return true;
 }
 

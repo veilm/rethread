@@ -4,8 +4,8 @@ peek="rethread tabstrip peek 750"
 # export command, to target this same profile
 E="export RETHREAD_USER_DATA_DIR=$RETHREAD_USER_DATA_DIR ;"
 
-config_root="${XDG_CONFIG_HOME:-$HOME/.config}"
-right_click_handler="$config_root/rethread/right-click-handler.py"
+config="${XDG_CONFIG_HOME:-$HOME/.config}/rethread"
+right_click_handler="$config/right-click-handler.py"
 rethread bind --context-menu "$E $right_click_handler"
 
 rethread bind --ctrl --key t "$E rethread tabs open 'https://veilm.github.io/rethread/' ; $peek"
@@ -30,10 +30,12 @@ rethread bind --alt --key r "$E echo 'window.location.reload()' | rethread eval 
 rethread bind --ctrl --shift --key i "$E rethread devtools open"
 rethread bind --alt --shift --key i "$E rethread devtools open"
 
-# navigate to url from wl-paste, copy url
+# navigate to url from wl-paste, copy url using wl-copy
 rethread bind --alt --key p "$E echo \"window.location.href = '\$(wl-paste)'\" | rethread eval --stdin ; $peek"
 rethread bind --alt --shift --key p "$E rethread tabs open \"\$(wl-paste)\" ; $peek"
 rethread bind --alt --key y "$E wl-copy \$(rethread tabs list | jq -r '.tabs[] | select(.active == true) | .url')"
 
 echo "archived.moe" | rethread rules js --blacklist
-echo "google.com" | rethread rules iframes --whitelist
+
+# default google etc + any bonus user-defined
+cat $config/iframes-whitelist*.txt | rethread rules iframes --whitelist
