@@ -5,6 +5,7 @@ peek="rethread tabstrip peek 750"
 E="export RETHREAD_USER_DATA_DIR=$RETHREAD_USER_DATA_DIR ;"
 
 config="${XDG_CONFIG_HOME:-$HOME/.config}/rethread"
+command_menu="$config/rethread-command-menu.py"
 right_click_handler="$config/right-click-handler.py"
 rethread bind --context-menu "$E $right_click_handler"
 
@@ -37,6 +38,7 @@ rethread bind --alt --shift --key i "$E rethread devtools open"
 rethread bind --alt --key p "$E echo \"window.location.href = '\$(wl-paste)'\" | rethread eval --stdin ; $peek"
 rethread bind --alt --shift --key p "$E rethread tabs open \"\$(wl-paste)\" ; $peek"
 rethread bind --alt --key y "$E wl-copy \$(rethread tabs list | jq -r '.tabs[] | select(.active == true) | .url') ; rethread tabstrip message --duration=500 'Copied URL'"
+rethread bind --alt --key ';' "$E \"$command_menu\""
 
 echo "archived.moe" | rethread rules js --blacklist
 

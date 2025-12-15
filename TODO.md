@@ -12,9 +12,5 @@ TODO most important
 	recipe articles, you simply would never consider given the state of LLM
 	search
 
-- simple tab bar
-
-- general bindings for switching tabs etc
-
 - editing a textarea inside kakoune remotely
 	maybe a binding for that
