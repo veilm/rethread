@@ -48,6 +48,7 @@ class TabManager : public QObject {
   bool activateTab(int id);
   bool cycleActiveTab(int delta);
   QList<TabSnapshot> snapshot() const;
+  bool SwapTabs(int first_index, int second_index);
   bool closeTabAtIndex(int index);
   bool closeActiveTab();
   void closeAllTabs();

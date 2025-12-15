@@ -31,6 +31,7 @@ class CommandDispatcher {
   QString HandleHistoryForward() const;
   QString HandleBind(const QString& args) const;
   QString HandleUnbind(const QString& args) const;
+  QString HandleSwap(const QString& args) const;
   QString HandleTabStrip(const QString& args) const;
   QString HandleEval(const QString& args) const;
   QString HandleRules(const QString& args) const;
