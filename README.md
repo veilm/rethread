@@ -87,6 +87,17 @@ into your startup script (with input redirection) to populate the in-memory
 blocklist at launch. Tabs consult the list whenever they navigate to a new URL,
 so changes apply immediately without restarting the browser.
 
+## devtools
+
+Open the inspector for the active tab at any time:
+
+```
+rethread devtools open
+```
+
+It spawns a standard Qt WebEngine DevTools window (one per tab) so you can keep
+working from the CLI and still reach the familiar debugging tools.
+
 ## tab strip overlay
 
 The tab strip overlay starts hidden. Use the CLI to control it at runtime:

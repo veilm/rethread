@@ -70,6 +70,11 @@ void PrintRulesUsage() {
       << "  Provide newline-delimited hostnames via stdin "
          "(e.g. `rethread rules ... < hosts.txt`).\n";
 }
+
+void PrintDevToolsUsage() {
+  std::cerr
+      << "Usage: rethread devtools [--user-data-dir=PATH] [--profile=NAME] open\n";
+}
 void PrintEvalUsage() {
   std::cerr
       << "Usage: rethread eval [--user-data-dir=PATH] [--profile=NAME] [--stdin]\n"
@@ -773,6 +778,43 @@ int RunRulesCli(int argc,
   std::ostringstream payload;
   payload << "rules load-js-blocklist --data=" << encoded << "\n";
   if (!SendCommand(TabSocketPath(user_data_dir), payload.str())) {
+    return 1;
+  }
+  return 0;
+}
+
+int RunDevToolsCli(int argc,
+                   char* argv[],
+                   const std::string& default_user_data_dir) {
+  std::string user_data_dir;
+  int index = 0;
+  if (!ParseUserDataDir(argc, argv, default_user_data_dir, &user_data_dir,
+                        &index)) {
+    return 1;
+  }
+  if (index < argc) {
+    std::string maybe_help = argv[index];
+    if (maybe_help == "--help" || maybe_help == "-h") {
+      PrintDevToolsUsage();
+      return 0;
+    }
+  }
+  if (index >= argc) {
+    PrintDevToolsUsage();
+    return 1;
+  }
+  std::string action = argv[index++];
+  if (action != "open") {
+    std::cerr << "Unknown devtools action: " << action << "\n";
+    PrintDevToolsUsage();
+    return 1;
+  }
+  if (index < argc) {
+    std::cerr << "devtools open does not take additional arguments\n";
+    PrintDevToolsUsage();
+    return 1;
+  }
+  if (!SendCommand(TabSocketPath(user_data_dir), "devtools open\n")) {
     return 1;
   }
   return 0;
