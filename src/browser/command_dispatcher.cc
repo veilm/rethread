@@ -14,6 +14,7 @@
 
 #include "browser/context_menu_binding_manager.h"
 #include "browser/key_binding_manager.h"
+#include "browser/rules_manager.h"
 #include "browser/tab_manager.h"
 #include "browser/tab_strip_controller.h"
 
@@ -129,10 +130,12 @@ QString VariantToJson(const QVariant& value) {
 CommandDispatcher::CommandDispatcher(TabManager* tab_manager,
                                      KeyBindingManager* key_binding_manager,
                                      ContextMenuBindingManager* context_menu_binding_manager,
+                                     RulesManager* rules_manager,
                                      TabStripController* tab_strip_controller)
     : tab_manager_(tab_manager),
       key_binding_manager_(key_binding_manager),
       context_menu_binding_manager_(context_menu_binding_manager),
+      rules_manager_(rules_manager),
       tab_strip_controller_(tab_strip_controller) {}
 
 QString CommandDispatcher::Execute(const QString& command) const {
@@ -183,6 +186,11 @@ QString CommandDispatcher::Execute(const QString& command) const {
     std::string rest;
     std::getline(stream, rest);
     return HandleUnbind(QString::fromStdString(rest));
+  }
+  if (op == "rules") {
+    std::string rest;
+    std::getline(stream, rest);
+    return HandleRules(QString::fromStdString(rest));
   }
   if (op == "tabstrip") {
     std::string rest;
@@ -475,6 +483,54 @@ QString CommandDispatcher::HandleUnbind(const QString& args) const {
     return QStringLiteral("ERR failed to remove binding\n");
   }
   return QString();
+}
+
+QString CommandDispatcher::HandleRules(const QString& args) const {
+  std::istringstream stream(args.toStdString());
+  std::string action;
+  stream >> action;
+  if (action.empty()) {
+    return QStringLiteral("ERR missing rules action\n");
+  }
+  if (action != "load-js-blocklist") {
+    return QStringLiteral("ERR unknown rules action\n");
+  }
+  std::string token;
+  std::string data_hex;
+  while (stream >> token) {
+    if (token == "--data") {
+      if (!(stream >> data_hex)) {
+        return QStringLiteral("ERR missing rules data\n");
+      }
+      continue;
+    }
+    const std::string prefix = "--data=";
+    if (token.rfind(prefix, 0) == 0) {
+      data_hex = token.substr(prefix.size());
+      continue;
+    }
+    if (!token.empty()) {
+      return QStringLiteral("ERR unknown rules flag\n");
+    }
+  }
+  if (data_hex.empty()) {
+    return QStringLiteral("ERR missing rules data\n");
+  }
+  std::string decoded;
+  if (!DecodeHex(data_hex, &decoded)) {
+    return QStringLiteral("ERR invalid rules payload\n");
+  }
+  if (!rules_manager_) {
+    return QStringLiteral("ERR rules unavailable\n");
+  }
+  int count = 0;
+  if (!rules_manager_->LoadJavaScriptBlocklist(
+          QString::fromUtf8(decoded.data(),
+                            static_cast<int>(decoded.size())),
+          &count)) {
+    return QStringLiteral("ERR failed to load rules\n");
+  }
+  return QStringLiteral("Loaded %1 host(s)\n").arg(count);
 }
 
 QString CommandDispatcher::HandleTabStrip(const QString& args) const {

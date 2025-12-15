@@ -63,6 +63,13 @@ void PrintTabStripUsage() {
                "show|hide|toggle|peek <ms>\n";
 }
 
+void PrintRulesUsage() {
+  std::cerr
+      << "Usage: rethread rules [--user-data-dir=PATH] [--profile=NAME]\n"
+      << "                      load-js-blocklist\n"
+      << "  Provide newline-delimited hostnames via stdin "
+         "(e.g. `rethread rules ... < hosts.txt`).\n";
+}
 void PrintEvalUsage() {
   std::cerr
       << "Usage: rethread eval [--user-data-dir=PATH] [--profile=NAME] [--stdin]\n"
@@ -722,6 +729,49 @@ int RunTabStripCli(int argc,
     return 1;
   }
 
+  if (!SendCommand(TabSocketPath(user_data_dir), payload.str())) {
+    return 1;
+  }
+  return 0;
+}
+
+int RunRulesCli(int argc,
+                char* argv[],
+                const std::string& default_user_data_dir) {
+  std::string user_data_dir;
+  int index = 0;
+  if (!ParseUserDataDir(argc, argv, default_user_data_dir, &user_data_dir,
+                        &index)) {
+    return 1;
+  }
+  if (index < argc) {
+    std::string maybe_help = argv[index];
+    if (maybe_help == "--help" || maybe_help == "-h") {
+      PrintRulesUsage();
+      return 0;
+    }
+  }
+  if (index >= argc) {
+    PrintRulesUsage();
+    return 1;
+  }
+  std::string action = argv[index++];
+  if (action != "load-js-blocklist") {
+    std::cerr << "Unknown rules action: " << action << "\n";
+    PrintRulesUsage();
+    return 1;
+  }
+
+  std::ostringstream buffer;
+  buffer << std::cin.rdbuf();
+  const std::string data = buffer.str();
+  if (data.empty()) {
+    std::cerr << "load-js-blocklist requires host data via stdin\n";
+    return 1;
+  }
+  const std::string encoded = HexEncode(data);
+  std::ostringstream payload;
+  payload << "rules load-js-blocklist --data=" << encoded << "\n";
   if (!SendCommand(TabSocketPath(user_data_dir), payload.str())) {
     return 1;
   }

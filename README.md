@@ -71,6 +71,21 @@ The helper installed at `$XDG_CONFIG_HOME/rethread/right-click-handler.sh`
 demonstrates how to bridge those variables back into the historical `menu x`
 workflow, and `util/startup.sh` wires it up automatically when present.
 
+## per-site rules
+
+Use `rethread rules load-js-blocklist` to disable JavaScript on specific hosts.
+Provide newline-delimited hostnames (optionally with comments prefixed by `#`)
+via stdin:
+
+```
+cat hosts_to_block_js.txt | rethread rules load-js-blocklist
+```
+
+Each non-empty line becomes a case-insensitive host match. Drop the same command
+into your startup script (with input redirection) to populate the in-memory
+blocklist at launch. Tabs consult the list whenever they navigate to a new URL,
+so changes apply immediately without restarting the browser.
+
 ## tab strip overlay
 
 The tab strip overlay starts hidden. Use the CLI to control it at runtime:

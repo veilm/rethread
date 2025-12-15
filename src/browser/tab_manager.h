@@ -18,6 +18,7 @@ class QWebEngineView;
 namespace rethread {
 
 class ContextMenuBindingManager;
+class RulesManager;
 class WebView;
 
 class TabManager : public QObject {
@@ -38,6 +39,7 @@ class TabManager : public QObject {
 
   void setContainer(QStackedWidget* stack);
   void setContextMenuBindingManager(ContextMenuBindingManager* manager);
+  void setRulesManager(RulesManager* manager);
 
   int openTab(const QUrl& url, bool activate, bool append_to_end = false);
   bool activateTab(int id);
@@ -79,10 +81,13 @@ class TabManager : public QObject {
   void notifyTabsChanged();
   int nextTabId();
   bool closeById(int id);
+  void ApplyRulesToView(WebView* view, const QUrl& url) const;
+  void ApplyRulesToAllTabs() const;
 
   QWebEngineProfile* profile_ = nullptr;
   QColor background_color_;
   ContextMenuBindingManager* context_menu_binding_manager_ = nullptr;
+  RulesManager* rules_manager_ = nullptr;
   QStackedWidget* stack_ = nullptr;
   std::vector<std::unique_ptr<TabEntry>> tabs_;
   int next_tab_id_ = 1;
