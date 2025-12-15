@@ -66,9 +66,9 @@ void PrintTabStripUsage() {
 void PrintRulesUsage() {
   std::cerr
       << "Usage: rethread rules [--user-data-dir=PATH] [--profile=NAME]\n"
-      << "                      load-js-blocklist\n"
+      << "                      (js|iframes) (--whitelist|--blacklist)\n"
       << "  Provide newline-delimited hostnames via stdin "
-         "(e.g. `rethread rules ... < hosts.txt`).\n";
+         "(e.g. `rethread rules js --blacklist < hosts.txt`).\n";
 }
 
 void PrintDevToolsUsage() {
@@ -761,8 +761,36 @@ int RunRulesCli(int argc,
     return 1;
   }
   std::string action = argv[index++];
-  if (action != "load-js-blocklist") {
-    std::cerr << "Unknown rules action: " << action << "\n";
+  if (action != "js" && action != "iframes") {
+    std::cerr << "Unknown rules target: " << action << "\n";
+    PrintRulesUsage();
+    return 1;
+  }
+
+  bool whitelist = false;
+  bool blacklist = false;
+  while (index < argc) {
+    std::string arg = argv[index];
+    if (arg == "--whitelist") {
+      whitelist = true;
+      ++index;
+      continue;
+    }
+    if (arg == "--blacklist") {
+      blacklist = true;
+      ++index;
+      continue;
+    }
+    if (arg == "--help" || arg == "-h") {
+      PrintRulesUsage();
+      return 0;
+    }
+    std::cerr << "Unknown rules flag: " << arg << "\n";
+    PrintRulesUsage();
+    return 1;
+  }
+  if (whitelist == blacklist) {
+    std::cerr << "Specify exactly one of --whitelist or --blacklist\n";
     PrintRulesUsage();
     return 1;
   }
@@ -771,12 +799,14 @@ int RunRulesCli(int argc,
   buffer << std::cin.rdbuf();
   const std::string data = buffer.str();
   if (data.empty()) {
-    std::cerr << "load-js-blocklist requires host data via stdin\n";
+    std::cerr << "rules requires host data via stdin\n";
     return 1;
   }
   const std::string encoded = HexEncode(data);
   std::ostringstream payload;
-  payload << "rules load-js-blocklist --data=" << encoded << "\n";
+  payload << "rules " << action << " --mode="
+          << (whitelist ? "whitelist" : "blacklist") << " --data=" << encoded
+          << "\n";
   if (!SendCommand(TabSocketPath(user_data_dir), payload.str())) {
     return 1;
   }

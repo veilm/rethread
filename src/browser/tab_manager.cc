@@ -402,14 +402,20 @@ bool TabManager::OpenDevToolsForActiveTab() {
   devtools_view->resize(900, 700);
   devtools_view->show();
   devtools_windows_[inspected_page] = devtools_view;
-  QObject::connect(devtools_view, &QObject::destroyed, this,
-                   [this, inspected_page]() { CloseDevTools(inspected_page); });
-  QObject::connect(inspected_page, &QObject::destroyed, this,
-                   [this, inspected_page]() { CloseDevTools(inspected_page); });
+  QObject::connect(
+      devtools_view, &QObject::destroyed, this,
+      [this, inspected_page]() { CloseDevTools(inspected_page, false); });
+  QObject::connect(
+      inspected_page, &QObject::destroyed, this,
+      [this, devtools_view]() {
+        if (devtools_view) {
+          devtools_view->close();
+        }
+      });
   return true;
 }
 
-void TabManager::CloseDevTools(QWebEnginePage* page) {
+void TabManager::CloseDevTools(QWebEnginePage* page, bool close_view) {
   if (!page) {
     return;
   }
@@ -417,11 +423,12 @@ void TabManager::CloseDevTools(QWebEnginePage* page) {
   if (it == devtools_windows_.end()) {
     return;
   }
-  if (auto view = it->second) {
+  QPointer<QWebEngineView> view = it->second;
+  devtools_windows_.erase(it);
+  page->setDevToolsPage(nullptr);
+  if (close_view && view) {
     view->close();
   }
-  page->setDevToolsPage(nullptr);
-  devtools_windows_.erase(it);
 }
 
 bool TabManager::EvaluateJavaScript(const QString& script,

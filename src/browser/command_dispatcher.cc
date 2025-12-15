@@ -495,31 +495,54 @@ QString CommandDispatcher::HandleRules(const QString& args) const {
   std::string action;
   stream >> action;
   if (action.empty()) {
-    return QStringLiteral("ERR missing rules action\n");
+    return QStringLiteral("ERR missing rules target\n");
   }
-  if (action != "load-js-blocklist") {
-    return QStringLiteral("ERR unknown rules action\n");
+  if (action != "js" && action != "iframes") {
+    return QStringLiteral("ERR unknown rules target\n");
   }
   std::string token;
+  std::string mode_text;
   std::string data_hex;
   while (stream >> token) {
+    if (token == "--mode") {
+      if (!(stream >> mode_text)) {
+        return QStringLiteral("ERR missing rules mode\n");
+      }
+      continue;
+    }
+    const std::string mode_prefix = "--mode=";
+    if (token.rfind(mode_prefix, 0) == 0) {
+      mode_text = token.substr(mode_prefix.size());
+      continue;
+    }
     if (token == "--data") {
       if (!(stream >> data_hex)) {
         return QStringLiteral("ERR missing rules data\n");
       }
       continue;
     }
-    const std::string prefix = "--data=";
-    if (token.rfind(prefix, 0) == 0) {
-      data_hex = token.substr(prefix.size());
+    const std::string data_prefix = "--data=";
+    if (token.rfind(data_prefix, 0) == 0) {
+      data_hex = token.substr(data_prefix.size());
       continue;
     }
     if (!token.empty()) {
       return QStringLiteral("ERR unknown rules flag\n");
     }
   }
+  if (mode_text.empty()) {
+    return QStringLiteral("ERR missing rules mode\n");
+  }
   if (data_hex.empty()) {
     return QStringLiteral("ERR missing rules data\n");
+  }
+  RulesManager::ListMode mode;
+  if (mode_text == "whitelist") {
+    mode = RulesManager::ListMode::kAllowlist;
+  } else if (mode_text == "blacklist") {
+    mode = RulesManager::ListMode::kBlacklist;
+  } else {
+    return QStringLiteral("ERR unknown rules mode\n");
   }
   std::string decoded;
   if (!DecodeHex(data_hex, &decoded)) {
@@ -528,11 +551,16 @@ QString CommandDispatcher::HandleRules(const QString& args) const {
   if (!rules_manager_) {
     return QStringLiteral("ERR rules unavailable\n");
   }
+  const QString text =
+      QString::fromUtf8(decoded.data(), static_cast<int>(decoded.size()));
   int count = 0;
-  if (!rules_manager_->LoadJavaScriptBlocklist(
-          QString::fromUtf8(decoded.data(),
-                            static_cast<int>(decoded.size())),
-          &count)) {
+  bool ok = false;
+  if (action == "js") {
+    ok = rules_manager_->LoadJavaScriptRules(mode, text, &count);
+  } else if (action == "iframes") {
+    ok = rules_manager_->LoadIframeRules(mode, text, &count);
+  }
+  if (!ok) {
     return QStringLiteral("ERR failed to load rules\n");
   }
   return QStringLiteral("Loaded %1 host(s)\n").arg(count);

@@ -74,18 +74,25 @@ automatically when present.
 
 ## per-site rules
 
-Use `rethread rules load-js-blocklist` to disable JavaScript on specific hosts.
-Provide newline-delimited hostnames (optionally with comments prefixed by `#`)
-via stdin:
+Use `rethread rules` to load newline-delimited hostname lists. Each rule accepts
+either a `--whitelist` (deny everything else) or `--blacklist` (allow
+everything else) flag.
+
+Disable JavaScript on specific hosts:
 
 ```
-cat hosts_to_block_js.txt | rethread rules load-js-blocklist
+cat hosts_to_block_js.txt | rethread rules js --blacklist
 ```
 
-Each non-empty line becomes a case-insensitive host match. Drop the same command
-into your startup script (with input redirection) to populate the in-memory
-blocklist at launch. Tabs consult the list whenever they navigate to a new URL,
-so changes apply immediately without restarting the browser.
+Block or allow third-party iframes to kill most popup hijacks:
+
+```
+cat iframe_blocklist.txt | rethread rules iframes --blacklist
+```
+
+Drop the same commands into your startup script (with input redirection) to
+populate the in-memory lists at launch. Tabs consult the rules whenever they
+navigate, so changes apply immediately without restarting the browser.
 
 ## devtools
 
