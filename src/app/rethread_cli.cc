@@ -30,6 +30,8 @@ void PrintCliUsage() {
             << "  rethread tabstrip [--user-data-dir=PATH] [--profile=NAME]\n"
             << "                    show|hide|toggle|peek <ms>\n"
             << "    Control the tab strip overlay.\n"
+            << "  rethread devtools [--user-data-dir=PATH] [--profile=NAME] open\n"
+            << "    Open DevTools for the active tab.\n"
             << "  rethread browser [options]\n"
             << "    Launch the browser UI (same flags as rethread-browser).\n";
 }
@@ -104,6 +106,10 @@ int main(int argc, char* argv[]) {
   if (command == "rules") {
     return rethread::RunRulesCli(argc - 2, argv + 2,
                                  rethread::DefaultUserDataRoot());
+  }
+  if (command == "devtools") {
+    return rethread::RunDevToolsCli(argc - 2, argv + 2,
+                                    rethread::DefaultUserDataRoot());
   }
 
   if (command == "browser") {

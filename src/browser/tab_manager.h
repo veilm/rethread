@@ -5,15 +5,18 @@
 #include <vector>
 
 #include <QColor>
+#include <QPointer>
 #include <QObject>
 #include <QUrl>
 #include <QString>
 #include <QVector>
 #include <QVariant>
+#include <unordered_map>
 
 class QStackedWidget;
 class QWebEngineProfile;
 class QWebEngineView;
+class QWebEnginePage;
 
 namespace rethread {
 
@@ -50,6 +53,7 @@ class TabManager : public QObject {
   void closeAllTabs();
   bool historyBack();
   bool historyForward();
+  bool OpenDevToolsForActiveTab();
   bool EvaluateJavaScript(const QString& script,
                           int tab_id,
                           int tab_index,
@@ -83,6 +87,7 @@ class TabManager : public QObject {
   bool closeById(int id);
   void ApplyRulesToView(WebView* view, const QUrl& url) const;
   void ApplyRulesToAllTabs() const;
+  void CloseDevTools(QWebEnginePage* page);
 
   QWebEngineProfile* profile_ = nullptr;
   QColor background_color_;
@@ -91,6 +96,8 @@ class TabManager : public QObject {
   QStackedWidget* stack_ = nullptr;
   std::vector<std::unique_ptr<TabEntry>> tabs_;
   int next_tab_id_ = 1;
+  std::unordered_map<QWebEnginePage*, QPointer<QWebEngineView>>
+      devtools_windows_;
 };
 
 }  // namespace rethread

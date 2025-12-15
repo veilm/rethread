@@ -376,6 +376,54 @@ void TabManager::ApplyRulesToAllTabs() const {
   }
 }
 
+bool TabManager::OpenDevToolsForActiveTab() {
+  QWebEngineView* view = activeView();
+  if (!view || !view->page()) {
+    return false;
+  }
+  QWebEnginePage* inspected_page = view->page();
+  auto it = devtools_windows_.find(inspected_page);
+  if (it != devtools_windows_.end()) {
+    if (auto existing = it->second) {
+      existing->raise();
+      existing->activateWindow();
+      return true;
+    }
+    devtools_windows_.erase(it);
+  }
+
+  auto* devtools_page = new QWebEnginePage(profile_, this);
+  inspected_page->setDevToolsPage(devtools_page);
+  auto* devtools_view = new QWebEngineView();
+  devtools_view->setAttribute(Qt::WA_DeleteOnClose);
+  devtools_view->setWindowTitle(
+      QStringLiteral("DevTools - %1").arg(view->title()));
+  devtools_view->setPage(devtools_page);
+  devtools_view->resize(900, 700);
+  devtools_view->show();
+  devtools_windows_[inspected_page] = devtools_view;
+  QObject::connect(devtools_view, &QObject::destroyed, this,
+                   [this, inspected_page]() { CloseDevTools(inspected_page); });
+  QObject::connect(inspected_page, &QObject::destroyed, this,
+                   [this, inspected_page]() { CloseDevTools(inspected_page); });
+  return true;
+}
+
+void TabManager::CloseDevTools(QWebEnginePage* page) {
+  if (!page) {
+    return;
+  }
+  auto it = devtools_windows_.find(page);
+  if (it == devtools_windows_.end()) {
+    return;
+  }
+  if (auto view = it->second) {
+    view->close();
+  }
+  page->setDevToolsPage(nullptr);
+  devtools_windows_.erase(it);
+}
+
 bool TabManager::EvaluateJavaScript(const QString& script,
                                     int tab_id,
                                     int tab_index,

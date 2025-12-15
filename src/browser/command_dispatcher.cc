@@ -192,6 +192,11 @@ QString CommandDispatcher::Execute(const QString& command) const {
     std::getline(stream, rest);
     return HandleRules(QString::fromStdString(rest));
   }
+  if (op == "devtools") {
+    std::string rest;
+    std::getline(stream, rest);
+    return HandleDevTools(QString::fromStdString(rest));
+  }
   if (op == "tabstrip") {
     std::string rest;
     std::getline(stream, rest);
@@ -531,6 +536,17 @@ QString CommandDispatcher::HandleRules(const QString& args) const {
     return QStringLiteral("ERR failed to load rules\n");
   }
   return QStringLiteral("Loaded %1 host(s)\n").arg(count);
+}
+
+QString CommandDispatcher::HandleDevTools(const QString& args) const {
+  Q_UNUSED(args);
+  if (!tab_manager_) {
+    return QStringLiteral("ERR devtools unavailable\n");
+  }
+  if (!tab_manager_->OpenDevToolsForActiveTab()) {
+    return QStringLiteral("ERR failed to open devtools\n");
+  }
+  return QString();
 }
 
 QString CommandDispatcher::HandleTabStrip(const QString& args) const {
