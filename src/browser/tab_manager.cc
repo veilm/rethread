@@ -214,6 +214,21 @@ QList<TabManager::TabSnapshot> TabManager::snapshot() const {
   return result;
 }
 
+bool TabManager::SwapTabs(int first_index, int second_index) {
+  if (first_index < 0 || second_index < 0 ||
+      first_index >= static_cast<int>(tabs_.size()) ||
+      second_index >= static_cast<int>(tabs_.size())) {
+    return false;
+  }
+  if (first_index == second_index) {
+    return true;
+  }
+  std::swap(tabs_[first_index], tabs_[second_index]);
+  applyActiveState();
+  notifyTabsChanged();
+  return true;
+}
+
 bool TabManager::closeTabAtIndex(int index) {
   if (index < 0 || index >= static_cast<int>(tabs_.size())) {
     return false;

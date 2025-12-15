@@ -125,6 +125,51 @@ QString VariantToJson(const QVariant& value) {
   return QStringLiteral("null");
 }
 
+QString ParseSwapToken(const QString& token,
+                       int active_index,
+                       int tab_count,
+                       int* index_out) {
+  if (!index_out) {
+    return QStringLiteral("ERR internal swap error\n");
+  }
+  const QString trimmed = token.trimmed();
+  if (trimmed.isEmpty()) {
+    return QStringLiteral("ERR swap requires index arguments\n");
+  }
+  const QString lower = trimmed.toLower();
+  if (lower == QStringLiteral("current") || lower == QStringLiteral("active")) {
+    *index_out = active_index;
+    return QString();
+  }
+  if ((trimmed.startsWith('+') || trimmed.startsWith('-')) &&
+      trimmed.size() > 1) {
+    bool ok = false;
+    int delta = trimmed.toInt(&ok);
+    if (!ok) {
+      return QStringLiteral("ERR invalid swap offset\n");
+    }
+    if (tab_count <= 0) {
+      return QStringLiteral("ERR no tabs available\n");
+    }
+    int target = (active_index + delta) % tab_count;
+    if (target < 0) {
+      target += tab_count;
+    }
+    *index_out = target;
+    return QString();
+  }
+  bool ok = false;
+  int parsed = trimmed.toInt(&ok);
+  if (!ok) {
+    return QStringLiteral("ERR invalid swap index\n");
+  }
+  if (parsed <= 0 || parsed > tab_count) {
+    return QStringLiteral("ERR swap index %1 out of range\n").arg(parsed);
+  }
+  *index_out = parsed - 1;
+  return QString();
+}
+
 }  // namespace
 
 CommandDispatcher::CommandDispatcher(TabManager* tab_manager,
@@ -176,6 +221,11 @@ QString CommandDispatcher::Execute(const QString& command) const {
     std::string rest;
     std::getline(stream, rest);
     return HandleOpen(QString::fromStdString(Trim(rest)));
+  }
+  if (op == "swap") {
+    std::string rest;
+    std::getline(stream, rest);
+    return HandleSwap(QString::fromStdString(rest));
   }
   if (op == "bind") {
     std::string rest;
@@ -320,6 +370,58 @@ QString CommandDispatcher::HandleOpen(const QString& url) const {
                                  open_at_end);
   if (id <= 0) {
     return QStringLiteral("ERR failed to open tab\n");
+  }
+  return QString();
+}
+
+QString CommandDispatcher::HandleSwap(const QString& args) const {
+  if (!tab_manager_) {
+    return QStringLiteral("ERR tabs unavailable\n");
+  }
+  auto tabs = tab_manager_->snapshot();
+  if (tabs.isEmpty()) {
+    return QStringLiteral("ERR no tabs to swap\n");
+  }
+  const QString trimmed = args.trimmed();
+  if (trimmed.isEmpty()) {
+    return QStringLiteral("ERR swap requires one or two indexes\n");
+  }
+  const QStringList tokens = trimmed.split(QChar(' '), Qt::SkipEmptyParts);
+  if (tokens.size() < 1 || tokens.size() > 2) {
+    return QStringLiteral("ERR swap expects one or two indexes\n");
+  }
+  int active_index = 0;
+  for (int i = 0; i < tabs.size(); ++i) {
+    if (tabs.at(i).active) {
+      active_index = i;
+      break;
+    }
+  }
+  int first_index = active_index;
+  int second_index = -1;
+  if (tokens.size() == 1) {
+    QString error =
+        ParseSwapToken(tokens.first(), active_index, tabs.size(), &second_index);
+    if (!error.isEmpty()) {
+      return error;
+    }
+  } else {
+    QString error =
+        ParseSwapToken(tokens.at(0), active_index, tabs.size(), &first_index);
+    if (!error.isEmpty()) {
+      return error;
+    }
+    error =
+        ParseSwapToken(tokens.at(1), active_index, tabs.size(), &second_index);
+    if (!error.isEmpty()) {
+      return error;
+    }
+  }
+  if (second_index < 0) {
+    return QStringLiteral("ERR swap target missing\n");
+  }
+  if (!tab_manager_->SwapTabs(first_index, second_index)) {
+    return QStringLiteral("ERR failed to swap tabs\n");
   }
   return QString();
 }
@@ -503,6 +605,7 @@ QString CommandDispatcher::HandleRules(const QString& args) const {
   std::string token;
   std::string mode_text;
   std::string data_hex;
+  bool append = false;
   while (stream >> token) {
     if (token == "--mode") {
       if (!(stream >> mode_text)) {
@@ -524,6 +627,10 @@ QString CommandDispatcher::HandleRules(const QString& args) const {
     const std::string data_prefix = "--data=";
     if (token.rfind(data_prefix, 0) == 0) {
       data_hex = token.substr(data_prefix.size());
+      continue;
+    }
+    if (token == "--append") {
+      append = true;
       continue;
     }
     if (!token.empty()) {
@@ -556,9 +663,9 @@ QString CommandDispatcher::HandleRules(const QString& args) const {
   int count = 0;
   bool ok = false;
   if (action == "js") {
-    ok = rules_manager_->LoadJavaScriptRules(mode, text, &count);
+    ok = rules_manager_->LoadJavaScriptRules(mode, text, append, &count);
   } else if (action == "iframes") {
-    ok = rules_manager_->LoadIframeRules(mode, text, &count);
+    ok = rules_manager_->LoadIframeRules(mode, text, append, &count);
   }
   if (!ok) {
     return QStringLiteral("ERR failed to load rules\n");
@@ -606,6 +713,54 @@ QString CommandDispatcher::HandleTabStrip(const QString& args) const {
       return QStringLiteral("ERR tabstrip peek requires duration in ms\n");
     }
     tab_strip_controller_->Peek(duration_ms);
+    return QString();
+  }
+  if (action == "message") {
+    std::string token;
+    std::string duration_text;
+    std::string data_hex;
+    while (stream >> token) {
+      if (token == "--duration") {
+        stream >> duration_text;
+        continue;
+      }
+      const std::string duration_prefix = "--duration=";
+      if (token.rfind(duration_prefix, 0) == 0) {
+        duration_text = token.substr(duration_prefix.size());
+        continue;
+      }
+      if (token == "--data") {
+        stream >> data_hex;
+        continue;
+      }
+      const std::string data_prefix = "--data=";
+      if (token.rfind(data_prefix, 0) == 0) {
+        data_hex = token.substr(data_prefix.size());
+        continue;
+      }
+      if (!token.empty()) {
+        return QStringLiteral("ERR unknown tabstrip message flag\n");
+      }
+    }
+    if (duration_text.empty()) {
+      return QStringLiteral("ERR tabstrip message requires --duration\n");
+    }
+    bool ok = false;
+    int duration_ms = QString::fromStdString(duration_text).toInt(&ok);
+    if (!ok || duration_ms < 0) {
+      return QStringLiteral("ERR invalid tabstrip message duration\n");
+    }
+    if (data_hex.empty()) {
+      return QStringLiteral("ERR tabstrip message missing data\n");
+    }
+    std::string decoded;
+    if (!DecodeHex(data_hex, &decoded)) {
+      return QStringLiteral("ERR invalid tabstrip message payload\n");
+    }
+    const QString payload =
+        QString::fromUtf8(decoded.data(), static_cast<int>(decoded.size()));
+    const QStringList lines = payload.split(QChar('\n'));
+    tab_strip_controller_->ShowMessage(lines, duration_ms);
     return QString();
   }
   return QStringLiteral("ERR unknown tabstrip action\n");

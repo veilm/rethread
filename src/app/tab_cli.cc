@@ -25,6 +25,7 @@ void PrintTabUsage() {
          "  get|list              List open tabs.\n"
          "  switch <id>           Activate the tab with the given id.\n"
          "  cycle <delta>         Move relative tab focus.\n"
+         "  swap <target> [peer]  Swap/move tabs by index or +/- offset (wraps around).\n"
          "  open [--at-end] <url> Open a new tab (default inserts after the active tab).\n"
          "  history-back          Navigate back in the active tab.\n"
          "  history-forward       Navigate forward in the active tab.\n"
@@ -59,14 +60,17 @@ void PrintUnbindUsage() {
 }
 
 void PrintTabStripUsage() {
-  std::cerr << "Usage: rethread tabstrip [--user-data-dir=PATH] [--profile=NAME] "
-               "show|hide|toggle|peek <ms>\n";
+  std::cerr
+      << "Usage: rethread tabstrip [--user-data-dir=PATH] [--profile=NAME]\n"
+      << "       show|hide|toggle|peek <ms>\n"
+      << "       message --duration=MS [--stdin] <text>\n";
 }
 
 void PrintRulesUsage() {
   std::cerr
       << "Usage: rethread rules [--user-data-dir=PATH] [--profile=NAME]\n"
       << "                      (js|iframes) (--whitelist|--blacklist)\n"
+      << "                      [--append]\n"
       << "  Provide newline-delimited hostnames via stdin "
          "(e.g. `rethread rules js --blacklist < hosts.txt`).\n";
 }
@@ -345,6 +349,16 @@ int RunTabCli(int argc, char* argv[], const std::string& default_user_data_dir) 
       return 1;
     }
     payload << "cycle " << argv[index++] << "\n";
+  } else if (cmd == "swap") {
+    if (index >= argc) {
+      std::cerr << "swap requires at least one index or offset\n";
+      return 1;
+    }
+    payload << "swap";
+    for (int i = index; i < argc; ++i) {
+      payload << " " << argv[i];
+    }
+    payload << "\n";
   } else if (cmd == "open") {
     bool open_at_end = false;
     while (index < argc) {
@@ -728,6 +742,84 @@ int RunTabStripCli(int argc,
       PrintTabStripUsage();
       return 1;
     }
+  } else if (action == "message") {
+    bool use_stdin = false;
+    int duration_ms = -1;
+    while (index < argc) {
+      std::string arg = argv[index];
+      if (arg == "--stdin") {
+        use_stdin = true;
+        ++index;
+        continue;
+      }
+      if (arg == "--duration") {
+        if (index + 1 >= argc) {
+          std::cerr << "--duration requires a value\n";
+          return 1;
+        }
+        std::string value = argv[index + 1];
+        int parsed = 0;
+        if (value != "0" && !ParsePositiveInt(value, &parsed)) {
+          std::cerr << "Invalid --duration value\n";
+          return 1;
+        }
+        duration_ms = (value == "0") ? 0 : parsed;
+        index += 2;
+        continue;
+      }
+      const std::string duration_prefix = "--duration=";
+      if (arg.rfind(duration_prefix, 0) == 0) {
+        std::string value = arg.substr(duration_prefix.size());
+        int parsed = 0;
+        if (value != "0" && !ParsePositiveInt(value, &parsed)) {
+          std::cerr << "Invalid --duration value\n";
+          return 1;
+        }
+        duration_ms = (value == "0") ? 0 : parsed;
+        ++index;
+        continue;
+      }
+      if (arg == "--") {
+        ++index;
+        break;
+      }
+      break;
+    }
+    if (duration_ms < 0) {
+      std::cerr << "tabstrip message requires --duration\n";
+      PrintTabStripUsage();
+      return 1;
+    }
+    std::string message;
+    if (use_stdin) {
+      if (index < argc) {
+        std::cerr << "--stdin cannot be combined with inline text\n";
+        return 1;
+      }
+      std::ostringstream buffer;
+      buffer << std::cin.rdbuf();
+      message = buffer.str();
+    } else {
+      if (index >= argc) {
+        std::cerr << "tabstrip message requires text after --duration\n";
+        PrintTabStripUsage();
+        return 1;
+      }
+      std::ostringstream buffer;
+      for (int i = index; i < argc; ++i) {
+        if (i > index) {
+          buffer << " ";
+        }
+        buffer << argv[i];
+      }
+      message = buffer.str();
+    }
+    if (message.empty()) {
+      std::cerr << "tabstrip message requires non-empty text\n";
+      return 1;
+    }
+    payload << "tabstrip message --duration=" << duration_ms
+            << " --data=" << HexEncode(message) << "\n";
   } else {
     std::cerr << "Unknown tabstrip action: " << action << "\n";
     PrintTabStripUsage();
@@ -769,6 +861,7 @@ int RunRulesCli(int argc,
 
   bool whitelist = false;
   bool blacklist = false;
+  bool append = false;
   while (index < argc) {
     std::string arg = argv[index];
     if (arg == "--whitelist") {
@@ -778,6 +871,11 @@ int RunRulesCli(int argc,
     }
     if (arg == "--blacklist") {
       blacklist = true;
+      ++index;
+      continue;
+    }
+    if (arg == "--append") {
+      append = true;
       ++index;
       continue;
     }
@@ -806,7 +904,7 @@ int RunRulesCli(int argc,
   std::ostringstream payload;
   payload << "rules " << action << " --mode="
           << (whitelist ? "whitelist" : "blacklist") << " --data=" << encoded
-          << "\n";
+          << (append ? " --append" : "") << "\n";
   if (!SendCommand(TabSocketPath(user_data_dir), payload.str())) {
     return 1;
   }

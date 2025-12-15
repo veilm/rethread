@@ -19,8 +19,14 @@ class RulesManager : public QObject {
 
   explicit RulesManager(QObject* parent = nullptr);
 
-  bool LoadJavaScriptRules(ListMode mode, const QString& raw_text, int* host_count);
-  bool LoadIframeRules(ListMode mode, const QString& raw_text, int* host_count);
+  bool LoadJavaScriptRules(ListMode mode,
+                           const QString& raw_text,
+                           bool append,
+                           int* host_count);
+  bool LoadIframeRules(ListMode mode,
+                       const QString& raw_text,
+                       bool append,
+                       int* host_count);
 
   bool ShouldDisableJavaScript(const QUrl& url) const;
   bool ShouldBlockIframe(const QUrl& top_level_url,
@@ -37,6 +43,10 @@ class RulesManager : public QObject {
   };
 
   HostRule BuildRule(ListMode mode, const QString& raw_text) const;
+  bool ApplyRuleUpdate(HostRule* target,
+                       ListMode mode,
+                       const QString& raw_text,
+                       bool append);
   QString NormalizeHost(const QString& input) const;
   QString HostFromUrl(const QUrl& url) const;
 

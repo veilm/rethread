@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QStringList>
 #include <QTimer>
 
 #include "browser/tab_manager.h"
@@ -22,16 +23,20 @@ class TabStripController : public QObject {
   void Hide();
   void Toggle();
   void Peek(int milliseconds);
+  void ShowMessage(const QStringList& lines, int duration_ms);
 
  private:
   void ApplyVisibility(bool visible);
   void CancelPendingHide();
+  void ClearCustomMessage();
 
   QPointer<TabStripOverlay> overlay_;
   QList<TabStripOverlay::Entry> current_entries_;
+  QStringList custom_message_lines_;
   int visibility_token_ = 0;
   QTimer hide_timer_;
   bool visible_ = false;
+  bool showing_custom_message_ = false;
 };
 
 }  // namespace rethread

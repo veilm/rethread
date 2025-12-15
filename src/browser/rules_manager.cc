@@ -21,30 +21,36 @@ RulesManager::RulesManager(QObject* parent) : QObject(parent) {}
 
 bool RulesManager::LoadJavaScriptRules(ListMode mode,
                                        const QString& raw_text,
+                                       bool append,
                                        int* host_count) {
-  javascript_rules_ = BuildRule(mode, raw_text);
+  const bool appended =
+      ApplyRuleUpdate(&javascript_rules_, mode, raw_text, append);
   if (host_count) {
     *host_count = static_cast<int>(javascript_rules_.hosts.size());
   }
   AppendDebugLog("Loaded JavaScript rules entries=" +
                  std::to_string(javascript_rules_.hosts.size()) +
                  " mode=" +
-                 (mode == ListMode::kAllowlist ? "allowlist" : "blacklist"));
+                 (mode == ListMode::kAllowlist ? "allowlist" : "blacklist") +
+                 (appended ? " append" : " replace"));
   emit javaScriptRulesChanged();
   return true;
 }
 
 bool RulesManager::LoadIframeRules(ListMode mode,
                                    const QString& raw_text,
+                                   bool append,
                                    int* host_count) {
-  iframe_rules_ = BuildRule(mode, raw_text);
+  const bool appended =
+      ApplyRuleUpdate(&iframe_rules_, mode, raw_text, append);
   if (host_count) {
     *host_count = static_cast<int>(iframe_rules_.hosts.size());
   }
   AppendDebugLog("Loaded iframe rules entries=" +
                  std::to_string(iframe_rules_.hosts.size()) +
                  " mode=" +
-                 (mode == ListMode::kAllowlist ? "allowlist" : "blacklist"));
+                 (mode == ListMode::kAllowlist ? "allowlist" : "blacklist") +
+                 (appended ? " append" : " replace"));
   return true;
 }
 
@@ -97,6 +103,28 @@ RulesManager::HostRule RulesManager::BuildRule(ListMode mode,
     }
   }
   return rule;
+}
+
+bool RulesManager::ApplyRuleUpdate(HostRule* target,
+                                   ListMode mode,
+                                   const QString& raw_text,
+                                   bool append) {
+  if (!target) {
+    return false;
+  }
+  const bool can_append =
+      append && target->configured && target->mode == mode;
+  if (!can_append) {
+    *target = BuildRule(mode, raw_text);
+    return false;
+  }
+  HostRule additions = BuildRule(mode, raw_text);
+  for (const QString& host : additions.hosts) {
+    target->hosts.insert(host);
+  }
+  target->mode = mode;
+  target->configured = true;
+  return true;
 }
 
 QString RulesManager::NormalizeHost(const QString& input) const {

@@ -46,6 +46,17 @@ snippet works. Drop the same lines into
 Use `rethread unbind [mods] --key=...` to clear a binding and fall back to the
 browser's default behavior for that key combo.
 
+Move tabs without leaving the keyboard. Relative offsets wrap around the strip:
+
+```
+# move the active tab left / right
+rethread tabs swap -1
+rethread tabs swap +1
+
+# swap two explicit positions
+rethread tabs swap 1 4
+```
+
 ## right-click bindings
 
 Right clicks follow the same in-memory model. Bind the handler once and rethread
@@ -94,6 +105,17 @@ Drop the same commands into your startup script (with input redirection) to
 populate the in-memory lists at launch. Tabs consult the rules whenever they
 navigate, so changes apply immediately without restarting the browser.
 
+Need to tack on more hosts later without flushing the old list? Pass
+`--append` and the rules manager will merge them when the mode matches:
+
+```
+cat ad_networks.txt | rethread rules js --blacklist --append
+```
+
+Switching from blacklist to whitelist (or the other way around) while using
+`--append` automatically replaces the previous entries, so you never end up
+with mixed modes in memory.
+
 ## devtools
 
 Open the inspector for the active tab at any time:
@@ -121,11 +143,17 @@ rethread tabstrip peek 400
 # switch to next/previous tab, then peek for 750ms
 rethread tabs cycle 1 && rethread tabstrip peek 750
 rethread tabs cycle -1 && rethread tabstrip peek 750
+
+# flash arbitrary text (read from stdin here) for half a second
+printf 'Copied URL' | rethread tabstrip message --duration=500 --stdin
+rethread tabstrip message --duration=1200 "Pinned tab saved"
 ```
 
 `peek` always shows the overlay immediately and schedules a hide after the given
 duration (milliseconds). Any manual show/hide/toggle commands cancel pending
-peek hides.
+peek hides. `tabstrip message` piggybacks on the same overlay to display one or
+more lines of text for the duration you specify, so bindings can provide inline
+status toasts without building extra UI.
 
 ## evaluating JavaScript
 

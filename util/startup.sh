@@ -19,6 +19,9 @@ rethread bind --alt --key j "$E rethread tabs cycle 1 ; $peek"
 rethread bind --ctrl --shift --key tab "$E rethread tabs cycle -1 ; $peek"
 rethread bind --alt --key k "$E rethread tabs cycle -1 ; $peek"
 
+rethread bind --alt --shift --key k "$E rethread tabs swap -1 ; $peek"
+rethread bind --alt --shift --key j "$E rethread tabs swap +1 ; $peek"
+
 rethread bind --alt --key left "$E rethread tabs history-back ; $peek"
 rethread bind --alt --key h "$E rethread tabs history-back ; $peek"
 rethread bind --alt --key right "$E rethread tabs history-forward ; $peek"
@@ -33,7 +36,7 @@ rethread bind --alt --shift --key i "$E rethread devtools open"
 # navigate to url from wl-paste, copy url using wl-copy
 rethread bind --alt --key p "$E echo \"window.location.href = '\$(wl-paste)'\" | rethread eval --stdin ; $peek"
 rethread bind --alt --shift --key p "$E rethread tabs open \"\$(wl-paste)\" ; $peek"
-rethread bind --alt --key y "$E wl-copy \$(rethread tabs list | jq -r '.tabs[] | select(.active == true) | .url')"
+rethread bind --alt --key y "$E wl-copy \$(rethread tabs list | jq -r '.tabs[] | select(.active == true) | .url') ; rethread tabstrip message --duration=500 'Copied URL'"
 
 echo "archived.moe" | rethread rules js --blacklist
 
