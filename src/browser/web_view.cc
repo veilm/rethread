@@ -67,6 +67,10 @@ void WebView::HandleLoadingChanged(const QWebEngineLoadingInfo& info) {
   if (info.status() != QWebEngineLoadingInfo::LoadFailedStatus) {
     return;
   }
+  if (info.errorDomain() == QWebEngineLoadingInfo::HttpStatusCodeDomain) {
+    // Let the page render HTTP error responses (e.g. Cloudflare interstitials).
+    return;
+  }
   const QString html =
       QStringLiteral("<html><body style=\"margin:0;padding:2em;font-family:"
                      "sans-serif;background-color:%1;color:#f0f0f0;\">"
