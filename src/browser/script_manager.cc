@@ -307,9 +307,19 @@ QByteArray ScriptManager::BuildUserscript(const QString& id,
     const QString wrapper = QStringLiteral(
         "(() => {\n"
         "  const css = %1;\n"
-        "  const style = document.createElement(\"style\");\n"
-        "  style.textContent = css;\n"
-        "  (document.head || document.documentElement).appendChild(style);\n"
+        "\n"
+        "  function install() {\n"
+        "    const root = document.documentElement;\n"
+        "    if (!root) {\n"
+        "      setTimeout(install, 0);\n"
+        "      return;\n"
+        "    }\n"
+        "    const style = document.createElement(\"style\");\n"
+        "    style.textContent = css;\n"
+        "    (document.head || root).appendChild(style);\n"
+        "  }\n"
+        "\n"
+        "  install();\n"
         "})();\n")
                                .arg(JsonQuote(css_text));
     result.append(wrapper.toUtf8());
