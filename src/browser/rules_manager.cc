@@ -81,6 +81,9 @@ bool RulesManager::ShouldBlockIframe(const QUrl& top_level_url,
   const bool top_match =
       !top_host.isEmpty() && iframe_rules_.hosts.contains(top_host);
   if (iframe_rules_.mode == ListMode::kAllowlist) {
+    if (!frame_host.isEmpty() && frame_host == top_host) {
+      return false;
+    }
     return !(frame_match || top_match);
   }
   return frame_match || top_match;
