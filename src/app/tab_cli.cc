@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -73,6 +74,14 @@ void PrintRulesUsage() {
       << "                      [--append]\n"
       << "  Provide newline-delimited hostnames via stdin "
          "(e.g. `rethread rules js --blacklist < hosts.txt`).\n";
+}
+
+void PrintScriptsUsage() {
+  std::cerr
+      << "Usage: rethread scripts [--user-data-dir=PATH] [--profile=NAME]\n"
+      << "       add --id=ID [--match=PATTERN] [--run-at=TYPE] [--stylesheet] < script\n"
+      << "       list\n"
+      << "       rm --id=ID\n";
 }
 
 void PrintDevToolsUsage() {
@@ -291,6 +300,23 @@ bool ParsePositiveInt(const std::string& text, int* value) {
     return false;
   }
   *value = static_cast<int>(parsed);
+  return true;
+}
+
+bool IsValidScriptId(const std::string& id) {
+  if (id.empty()) {
+    return false;
+  }
+  for (char c : id) {
+    if (std::isalnum(static_cast<unsigned char>(c)) ||
+        c == '-' || c == '_' || c == '.') {
+      continue;
+    }
+    if (c == '/' || c == '\\') {
+      return false;
+    }
+    return false;
+  }
   return true;
 }
 
@@ -905,6 +931,168 @@ int RunRulesCli(int argc,
   payload << "rules " << action << " --mode="
           << (whitelist ? "whitelist" : "blacklist") << " --data=" << encoded
           << (append ? " --append" : "") << "\n";
+  if (!SendCommand(TabSocketPath(user_data_dir), payload.str())) {
+    return 1;
+  }
+  return 0;
+}
+
+int RunScriptsCli(int argc,
+                  char* argv[],
+                  const std::string& default_user_data_dir) {
+  std::string user_data_dir;
+  int index = 0;
+  if (!ParseUserDataDir(argc, argv, default_user_data_dir, &user_data_dir,
+                        &index)) {
+    return 1;
+  }
+  if (index < argc) {
+    std::string maybe_help = argv[index];
+    if (maybe_help == "--help" || maybe_help == "-h") {
+      PrintScriptsUsage();
+      return 0;
+    }
+  }
+  if (index >= argc) {
+    PrintScriptsUsage();
+    return 1;
+  }
+  std::string action = argv[index++];
+
+  std::ostringstream payload;
+  if (action == "list") {
+    if (index < argc) {
+      std::cerr << "scripts list does not take extra arguments\n";
+      PrintScriptsUsage();
+      return 1;
+    }
+    payload << "scripts list\n";
+  } else if (action == "rm") {
+    std::string id;
+    while (index < argc) {
+      std::string arg = argv[index];
+      if (arg == "--id") {
+        if (index + 1 >= argc) {
+          std::cerr << "--id requires a value\n";
+          return 1;
+        }
+        id = argv[index + 1];
+        index += 2;
+        continue;
+      }
+      const std::string id_prefix = "--id=";
+      if (arg.rfind(id_prefix, 0) == 0) {
+        id = arg.substr(id_prefix.size());
+        ++index;
+        continue;
+      }
+      if (arg == "--help" || arg == "-h") {
+        PrintScriptsUsage();
+        return 0;
+      }
+      std::cerr << "Unknown scripts rm flag: " << arg << "\n";
+      PrintScriptsUsage();
+      return 1;
+    }
+    if (!IsValidScriptId(id)) {
+      std::cerr << "scripts rm requires a valid --id\n";
+      return 1;
+    }
+    payload << "scripts rm --id=" << id << "\n";
+  } else if (action == "add") {
+    std::string id;
+    std::string match;
+    std::string run_at;
+    bool stylesheet = false;
+    while (index < argc) {
+      std::string arg = argv[index];
+      if (arg == "--stylesheet") {
+        stylesheet = true;
+        ++index;
+        continue;
+      }
+      if (arg == "--id") {
+        if (index + 1 >= argc) {
+          std::cerr << "--id requires a value\n";
+          return 1;
+        }
+        id = argv[index + 1];
+        index += 2;
+        continue;
+      }
+      const std::string id_prefix = "--id=";
+      if (arg.rfind(id_prefix, 0) == 0) {
+        id = arg.substr(id_prefix.size());
+        ++index;
+        continue;
+      }
+      if (arg == "--match") {
+        if (index + 1 >= argc) {
+          std::cerr << "--match requires a value\n";
+          return 1;
+        }
+        match = argv[index + 1];
+        index += 2;
+        continue;
+      }
+      const std::string match_prefix = "--match=";
+      if (arg.rfind(match_prefix, 0) == 0) {
+        match = arg.substr(match_prefix.size());
+        ++index;
+        continue;
+      }
+      if (arg == "--run-at") {
+        if (index + 1 >= argc) {
+          std::cerr << "--run-at requires a value\n";
+          return 1;
+        }
+        run_at = argv[index + 1];
+        index += 2;
+        continue;
+      }
+      const std::string run_prefix = "--run-at=";
+      if (arg.rfind(run_prefix, 0) == 0) {
+        run_at = arg.substr(run_prefix.size());
+        ++index;
+        continue;
+      }
+      if (arg == "--help" || arg == "-h") {
+        PrintScriptsUsage();
+        return 0;
+      }
+      std::cerr << "Unknown scripts add flag: " << arg << "\n";
+      PrintScriptsUsage();
+      return 1;
+    }
+    if (!IsValidScriptId(id)) {
+      std::cerr << "scripts add requires a valid --id\n";
+      return 1;
+    }
+    std::ostringstream buffer;
+    buffer << std::cin.rdbuf();
+    const std::string script = buffer.str();
+    if (script.empty()) {
+      std::cerr << "scripts add requires script data via stdin\n";
+      return 1;
+    }
+    payload << "scripts add"
+            << " --id=" << id;
+    if (stylesheet) {
+      payload << " --stylesheet";
+    }
+    if (!match.empty()) {
+      payload << " --match=" << match;
+    }
+    if (!run_at.empty()) {
+      payload << " --run-at=" << run_at;
+    }
+    payload << " --code=" << HexEncode(script) << "\n";
+  } else {
+    std::cerr << "Unknown scripts command: " << action << "\n";
+    PrintScriptsUsage();
+    return 1;
+  }
+
   if (!SendCommand(TabSocketPath(user_data_dir), payload.str())) {
     return 1;
   }

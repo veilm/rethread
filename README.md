@@ -116,6 +116,34 @@ Switching from blacklist to whitelist (or the other way around) while using
 `--append` automatically replaces the previous entries, so you never end up
 with mixed modes in memory.
 
+## userscripts
+
+Use `rethread scripts` to manage Greasemonkey-style userscripts per profile.
+Scripts are saved under
+`$XDG_DATA_HOME/rethread/PROFILE/scripts/<id>.user.js` and are loaded whenever
+the browser starts.
+
+```
+# add or replace a script (reads stdin)
+cat foo.js | rethread scripts add --id=my-script --match='*://example.com/*'
+
+# inject CSS via the helper wrapper
+cat tweaks.css | rethread scripts add --id=my-style --stylesheet --match='*://*/*'
+
+# inspect everything currently active
+rethread scripts list
+
+# remove a script by id
+rethread scripts rm --id=my-style
+```
+
+When stdin already starts with `// ==UserScript==`, the CLI preserves it and
+ignores `--match`, `--run-at`, and `--stylesheet`. Otherwise it generates the
+header automatically, fills in the provided `--match`, and defaults to
+`@run-at document-end` (use `--run-at=document-start|document-end|document-idle`
+to override it). Passing `--stylesheet` treats stdin as CSS and wraps it in a
+`<style>` injector that defaults to `document-start`.
+
 ## devtools
 
 Open the inspector for the active tab at any time:

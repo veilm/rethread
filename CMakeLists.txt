@@ -21,6 +21,7 @@ set(RETHREAD_BROWSER_SOURCES
     src/browser/context_menu_binding_manager.cc
     src/browser/rules_manager.cc
     src/browser/rules_request_interceptor.cc
+    src/browser/script_manager.cc
     src/browser/key_binding_manager.cc
     src/browser/main_window.cc
     src/browser/tab_ipc_server.cc

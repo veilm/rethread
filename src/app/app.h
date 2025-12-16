@@ -19,6 +19,7 @@ class KeyBindingManager;
 class MainWindow;
 class RulesManager;
 class RulesRequestInterceptor;
+class ScriptManager;
 class TabIpcServer;
 class TabManager;
 class TabStripController;
@@ -68,6 +69,7 @@ class BrowserApplication : public QObject {
   std::unique_ptr<ContextMenuBindingManager> context_menu_binding_manager_;
   std::unique_ptr<RulesManager> rules_manager_;
   std::unique_ptr<RulesRequestInterceptor> rules_interceptor_;
+  std::unique_ptr<ScriptManager> script_manager_;
   std::unique_ptr<CommandDispatcher> dispatcher_;
   std::unique_ptr<TabIpcServer> ipc_server_;
 };

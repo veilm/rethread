@@ -8,6 +8,7 @@ namespace rethread {
 class KeyBindingManager;
 class ContextMenuBindingManager;
 class RulesManager;
+class ScriptManager;
 class TabManager;
 class TabStripController;
 
@@ -17,6 +18,7 @@ class CommandDispatcher {
                     KeyBindingManager* key_binding_manager,
                     ContextMenuBindingManager* context_menu_binding_manager,
                     RulesManager* rules_manager,
+                    ScriptManager* script_manager,
                     TabStripController* tab_strip_controller);
 
   QString Execute(const QString& command) const;
@@ -36,11 +38,13 @@ class CommandDispatcher {
   QString HandleEval(const QString& args) const;
   QString HandleRules(const QString& args) const;
   QString HandleDevTools(const QString& args) const;
+  QString HandleScripts(const QString& args) const;
 
   TabManager* tab_manager_;
   KeyBindingManager* key_binding_manager_;
   ContextMenuBindingManager* context_menu_binding_manager_;
   RulesManager* rules_manager_;
+  ScriptManager* script_manager_;
   TabStripController* tab_strip_controller_;
 };
 
