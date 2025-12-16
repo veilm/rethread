@@ -1,19 +1,30 @@
 # rethread
-qutebrowser code is too complex and takes too long to compile. the people need a
-solution
+
+a new browser, designed to be very simple conceptually, easily extensible by humans and LLMs
+
+similar to [qutebrowser](https://github.com/qutebrowser/qutebrowser) but more minimal, Unix-y, and language-agnostic
+
+## screenshot
+
+![basic hyprland+tmux screenshot](https://sucralose.moe/static/rethread-0.png)
+
+(there's nothing of note. because the UI is minimal and usually non-existent, as it should be. this is just [a website](https://veilm.github.io/rethread/) open, not any special new tab page)
 
 ## running
-You need Qt 6 with WebEngine (on Arch: `sudo pacman -S qt6-base qt6-webengine`).
+
+**requirements**: Linux, Qt 6 with Web Engine (on Arch: `sudo pacman -S qt6-base qt6-webengine`)
 
 ```
 git clone --depth 1 https://github.com/veilm/rethread
-cd rethread/v1-cef
+cd rethread
 
 # configure + build (Makefile wraps CMake)
-make browser
-make cli
+make
 
-# launch the browser UI (or run ./build/rethread-browser directly)
+# install utils. TODO better build/install process
+./install.sh
+
+# launch the browser UI
 ./build/rethread browser --help
 ```
 
@@ -24,6 +35,8 @@ reloading the Qt stack each time. After startup, the browser automatically runs
 so you can pre-register keybindings or tweak state declaratively.
 `rethread tabs open` inserts the new tab immediately after the active tab; add
 `--at-end` to append to the end of the strip when you need the old behavior.
+
+TODO better docs, this Codex output is messy
 
 ## key bindings
 
@@ -202,3 +215,11 @@ rethread eval --tab-id=7 "({title: document.title, url: location.href})"
 
 The command prints the JSON-encoded return value (strings stay quoted, objects
 and arrays render as expected). Errors bubble up as `ERR ...` lines.
+
+## support
+
+open a GitHub issue or ping me on twitter. I'd be happy to answer any possible question
+
+## license
+
+MIT
