@@ -12,6 +12,7 @@ int RunTabStripCli(int argc, char* argv[],
                    const std::string& default_user_data_dir);
 int RunEvalCli(int argc, char* argv[], const std::string& default_user_data_dir);
 int RunRulesCli(int argc, char* argv[], const std::string& default_user_data_dir);
+int RunScriptsCli(int argc, char* argv[], const std::string& default_user_data_dir);
 int RunDevToolsCli(int argc, char* argv[],
                    const std::string& default_user_data_dir);
 

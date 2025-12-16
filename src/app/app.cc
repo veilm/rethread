@@ -16,6 +16,7 @@
 #include "browser/context_menu_binding_manager.h"
 #include "browser/rules_manager.h"
 #include "browser/rules_request_interceptor.h"
+#include "browser/script_manager.h"
 #include "browser/key_binding_manager.h"
 #include "browser/main_window.h"
 #include "browser/rules_manager.h"
@@ -61,6 +62,12 @@ bool BrowserApplication::Initialize() {
 
   InitializeProfile();
   if (!profile_) {
+    return false;
+  }
+
+  script_manager_ =
+      std::make_unique<ScriptManager>(profile_, options_.user_data_dir);
+  if (!script_manager_->Initialize()) {
     return false;
   }
 
@@ -133,7 +140,7 @@ void BrowserApplication::InitializeIpc() {
   dispatcher_ = std::make_unique<CommandDispatcher>(
       tab_manager_.get(), key_binding_manager_.get(),
       context_menu_binding_manager_.get(), rules_manager_.get(),
-      tab_strip_controller_.get());
+      script_manager_.get(), tab_strip_controller_.get());
 
   if (options_.tab_socket_path.isEmpty()) {
     return;

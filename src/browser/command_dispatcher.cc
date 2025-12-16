@@ -15,6 +15,7 @@
 #include "browser/context_menu_binding_manager.h"
 #include "browser/key_binding_manager.h"
 #include "browser/rules_manager.h"
+#include "browser/script_manager.h"
 #include "browser/tab_manager.h"
 #include "browser/tab_strip_controller.h"
 
@@ -176,11 +177,13 @@ CommandDispatcher::CommandDispatcher(TabManager* tab_manager,
                                      KeyBindingManager* key_binding_manager,
                                      ContextMenuBindingManager* context_menu_binding_manager,
                                      RulesManager* rules_manager,
+                                     ScriptManager* script_manager,
                                      TabStripController* tab_strip_controller)
     : tab_manager_(tab_manager),
       key_binding_manager_(key_binding_manager),
       context_menu_binding_manager_(context_menu_binding_manager),
       rules_manager_(rules_manager),
+      script_manager_(script_manager),
       tab_strip_controller_(tab_strip_controller) {}
 
 QString CommandDispatcher::Execute(const QString& command) const {
@@ -241,6 +244,11 @@ QString CommandDispatcher::Execute(const QString& command) const {
     std::string rest;
     std::getline(stream, rest);
     return HandleRules(QString::fromStdString(rest));
+  }
+  if (op == "scripts") {
+    std::string rest;
+    std::getline(stream, rest);
+    return HandleScripts(QString::fromStdString(rest));
   }
   if (op == "devtools") {
     std::string rest;
@@ -845,6 +853,164 @@ QString CommandDispatcher::HandleEval(const QString& args) const {
     return QStringLiteral("ERR failed to evaluate script\n");
   }
   return VariantToJson(result) + QChar('\n');
+}
+
+QString CommandDispatcher::HandleScripts(const QString& args) const {
+  if (!script_manager_) {
+    return QStringLiteral("ERR scripts unavailable\n");
+  }
+  const std::string trimmed = Trim(args.toStdString());
+  if (trimmed.empty()) {
+    return QStringLiteral("ERR missing scripts command\n");
+  }
+  std::istringstream stream(trimmed);
+  std::string action;
+  stream >> action;
+  std::string rest;
+  std::getline(stream, rest);
+  rest = Trim(rest);
+  if (action == "list") {
+    if (!rest.empty()) {
+      return QStringLiteral("ERR scripts list takes no arguments\n");
+    }
+    const auto scripts = script_manager_->ListScripts();
+    std::ostringstream out;
+    out << "{\n  \"scripts\": [";
+    for (size_t i = 0; i < scripts.size(); ++i) {
+      const auto& entry = scripts[i];
+      if (i == 0) {
+        out << "\n";
+      }
+      out << "    {\"id\": \"" << JsonEscape(entry.id) << "\", "
+          << "\"path\": \"" << JsonEscape(entry.path) << "\"}";
+      if (i + 1 < scripts.size()) {
+        out << ",";
+      }
+      out << "\n";
+    }
+    out << "  ]\n}\n";
+    return QString::fromStdString(out.str());
+  }
+  if (action == "rm") {
+    QString id;
+    std::istringstream rm_stream(rest);
+    std::string token;
+    while (rm_stream >> token) {
+      const std::string id_prefix = "--id=";
+      if (token == "--id") {
+        if (!(rm_stream >> token)) {
+          return QStringLiteral("ERR scripts rm requires a value after --id\n");
+        }
+        id = QString::fromStdString(token);
+        continue;
+      }
+      if (token.rfind(id_prefix, 0) == 0) {
+        id = QString::fromStdString(token.substr(id_prefix.size()));
+        continue;
+      }
+      if (!token.empty()) {
+        return QStringLiteral("ERR unknown scripts rm flag\n");
+      }
+    }
+    if (id.isEmpty()) {
+      return QStringLiteral("ERR scripts rm requires --id\n");
+    }
+    QString error;
+    if (!script_manager_->RemoveScript(id, &error)) {
+      if (error.isEmpty()) {
+        return QStringLiteral("ERR failed to remove script\n");
+      }
+      return QStringLiteral("ERR %1\n").arg(error);
+    }
+    return QString();
+  }
+  if (action == "add") {
+    QString id;
+    QString match;
+    QString run_at;
+    bool stylesheet = false;
+    std::string code_hex;
+    std::istringstream add_stream(rest);
+    std::string token;
+    while (add_stream >> token) {
+      if (token == "--stylesheet") {
+        stylesheet = true;
+        continue;
+      }
+      const std::string id_prefix = "--id=";
+      if (token == "--id") {
+        if (!(add_stream >> token)) {
+          return QStringLiteral("ERR scripts add requires a value after --id\n");
+        }
+        id = QString::fromStdString(token);
+        continue;
+      }
+      if (token.rfind(id_prefix, 0) == 0) {
+        id = QString::fromStdString(token.substr(id_prefix.size()));
+        continue;
+      }
+      const std::string match_prefix = "--match=";
+      if (token == "--match") {
+        if (!(add_stream >> token)) {
+          return QStringLiteral("ERR scripts add requires a value after --match\n");
+        }
+        match = QString::fromStdString(token);
+        continue;
+      }
+      if (token.rfind(match_prefix, 0) == 0) {
+        match = QString::fromStdString(token.substr(match_prefix.size()));
+        continue;
+      }
+      const std::string run_at_prefix = "--run-at=";
+      if (token == "--run-at") {
+        if (!(add_stream >> token)) {
+          return QStringLiteral("ERR scripts add requires a value after --run-at\n");
+        }
+        run_at = QString::fromStdString(token);
+        continue;
+      }
+      if (token.rfind(run_at_prefix, 0) == 0) {
+        run_at = QString::fromStdString(token.substr(run_at_prefix.size()));
+        continue;
+      }
+      const std::string code_prefix = "--code=";
+      if (token == "--code") {
+        if (!(add_stream >> token)) {
+          return QStringLiteral("ERR scripts add requires a value after --code\n");
+        }
+        code_hex = token;
+        continue;
+      }
+      if (token.rfind(code_prefix, 0) == 0) {
+        code_hex = token.substr(code_prefix.size());
+        continue;
+      }
+      if (!token.empty()) {
+        return QStringLiteral("ERR unknown scripts add flag\n");
+      }
+    }
+    if (id.isEmpty()) {
+      return QStringLiteral("ERR scripts add requires --id\n");
+    }
+    if (code_hex.empty()) {
+      return QStringLiteral("ERR scripts add is missing payload\n");
+    }
+    std::string decoded;
+    if (!DecodeHex(code_hex, &decoded)) {
+      return QStringLiteral("ERR invalid script payload\n");
+    }
+    QString error;
+    if (!script_manager_->AddScript(
+            id, QByteArray::fromStdString(decoded), stylesheet, match, run_at,
+            &error)) {
+      if (error.isEmpty()) {
+        return QStringLiteral("ERR failed to add script\n");
+      }
+      return QStringLiteral("ERR %1\n").arg(error);
+    }
+    return QString();
+  }
+  return QStringLiteral("ERR unknown scripts action\n");
 }
 
 }  // namespace rethread
