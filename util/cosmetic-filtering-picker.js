@@ -11,8 +11,11 @@
 
     let originalTarget = null; // What the user actually clicked
     let currentTarget = null;  // What the user is currently selecting (ancestor)
-    let pickerOverlay = null;  // The highlighter box
+    let highlightLayer = null; // Container for highlight boxes
+    let highlightBoxes = [];   // Individual highlight overlays
+    let highlightedElements = []; // Elements currently highlighted
     let uiRoot = null;         // The shadow DOM container
+    let viewportListener = null; // Shared handler for scroll/resize
 
     // --- 2. SELECTOR LOGIC ---
 
@@ -118,6 +121,22 @@
 
         // --- 4. STATE LOGIC ---
 
+        const updatePreview = () => {
+            const selector = textArea.value.trim();
+            let previewElements = [];
+            if (selector) {
+                try {
+                    previewElements = Array.from(document.querySelectorAll(selector));
+                } catch (err) {
+                    previewElements = [];
+                }
+            }
+            if (previewElements.length === 0 && currentTarget) {
+                previewElements = [currentTarget];
+            }
+            setHighlights(previewElements);
+        };
+
         const updateState = () => {
             // 1. Calculate Target based on Depth
             let level = parseInt(depthSlider.value);
@@ -129,13 +148,10 @@
             }
             currentTarget = el;
 
-            // 2. Highlight the new target
-            highlight(currentTarget);
-
-            // 3. Generate options for this target
+            // 2. Generate options for this target
             const options = generateSelectors(currentTarget);
             
-            // 4. Update Dropdown (preserve selection if possible)
+            // 3. Update Dropdown (preserve selection if possible)
             const currentVal = specSelect.value;
             specSelect.innerHTML = ''; // Clear old options
             options.forEach(opt => {
@@ -154,13 +170,17 @@
                 specSelect.value = '';
             }
 
-            // 5. Update Text Area
+            // 4. Update Text Area
             textArea.value = specSelect.value;
+
+            // 5. Update Highlight Preview
+            updatePreview();
         };
 
         // Listeners
         depthSlider.oninput = updateState;
-        specSelect.onchange = () => { textArea.value = specSelect.value; };
+        specSelect.onchange = () => { textArea.value = specSelect.value; updatePreview(); };
+        textArea.oninput = updatePreview;
         
         cancelBtn.onclick = () => {
             cleanup();
@@ -181,26 +201,98 @@
     }
 
     // --- 5. CORE HIGHLIGHTER ---
-    
-    function highlight(el) {
-        if (!pickerOverlay) {
-            pickerOverlay = document.createElement('div');
-            Object.assign(pickerOverlay.style, {
-                position: 'fixed', pointerEvents: 'none', zIndex: '9999998',
-                outline: '2px solid #f00', background: 'rgba(255,0,0,0.1)', transition: 'all 0.1s ease'
+    function ensureHighlightLayer() {
+        if (!highlightLayer) {
+            highlightLayer = document.createElement('div');
+            Object.assign(highlightLayer.style, {
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                width: '100vw',
+                height: '100vh',
+                pointerEvents: 'none',
+                zIndex: '9999998'
             });
-            document.body.appendChild(pickerOverlay);
+            document.body.appendChild(highlightLayer);
         }
-        const rect = el.getBoundingClientRect();
-        Object.assign(pickerOverlay.style, {
-            top: rect.top + 'px', left: rect.left + 'px',
-            width: rect.width + 'px', height: rect.height + 'px'
+    }
+
+    function setHighlights(elements) {
+        highlightedElements = (elements || []).filter(Boolean);
+        updateHighlightPositions();
+    }
+
+    function updateHighlightPositions() {
+        if (!highlightedElements || highlightedElements.length === 0) {
+            clearHighlightLayer();
+            return;
+        }
+        ensureHighlightLayer();
+
+        // Ensure we have the right number of highlight boxes
+        while (highlightBoxes.length < highlightedElements.length) {
+            const box = document.createElement('div');
+            Object.assign(box.style, {
+                position: 'absolute',
+                outline: '2px solid #f00',
+                background: 'rgba(255,0,0,0.1)',
+                transition: 'all 0.1s ease'
+            });
+            highlightLayer.appendChild(box);
+            highlightBoxes.push(box);
+        }
+        while (highlightBoxes.length > highlightedElements.length) {
+            const box = highlightBoxes.pop();
+            if (box) box.remove();
+        }
+
+        // Position boxes
+        highlightBoxes.forEach((box, idx) => {
+            const el = highlightedElements[idx];
+            if (!el || !el.isConnected) {
+                box.style.display = 'none';
+                return;
+            }
+            const rect = el.getBoundingClientRect();
+            Object.assign(box.style, {
+                display: 'block',
+                top: rect.top + 'px',
+                left: rect.left + 'px',
+                width: rect.width + 'px',
+                height: rect.height + 'px'
+            });
         });
+    }
+
+    function clearHighlightLayer() {
+        highlightBoxes.forEach(box => box.remove());
+        highlightBoxes = [];
+        if (highlightLayer) {
+            highlightLayer.remove();
+            highlightLayer = null;
+        }
+    }
+    
+    function attachViewportListeners() {
+        if (!viewportListener) {
+            viewportListener = () => updateHighlightPositions();
+            window.addEventListener('scroll', viewportListener, true);
+            window.addEventListener('resize', viewportListener);
+        }
+    }
+
+    function detachViewportListeners() {
+        if (viewportListener) {
+            window.removeEventListener('scroll', viewportListener, true);
+            window.removeEventListener('resize', viewportListener);
+            viewportListener = null;
+        }
     }
 
     // --- 6. INITIAL PICKER MODE ---
 
     function startPicker() {
+        attachViewportListeners();
         // Overlay for initial selection
         const cover = document.createElement('div');
         Object.assign(cover, { id: 'rethread-cover' });
@@ -214,7 +306,11 @@
             cover.style.display = 'none'; // Hide cover to get element below
             const el = document.elementFromPoint(e.clientX, e.clientY);
             cover.style.display = 'block'; // Restore cover
-            if (el) highlight(el);
+            if (el) {
+                setHighlights([el]);
+            } else {
+                setHighlights([]);
+            }
         };
 
         const onClick = (e) => {
@@ -242,7 +338,8 @@
     }
 
     function cleanup() {
-        if (pickerOverlay) pickerOverlay.remove();
+        clearHighlightLayer();
+        detachViewportListeners();
         if (uiRoot) uiRoot.remove();
         const cover = document.getElementById('rethread-cover');
         if (cover) cover.remove();
