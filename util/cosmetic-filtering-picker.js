@@ -148,6 +148,10 @@
             // Auto-select best option or previous
             if (options.some(o => o.value === currentVal)) {
                 specSelect.value = currentVal;
+            } else if (options.length > 0) {
+                specSelect.value = options[0].value;
+            } else {
+                specSelect.value = '';
             }
 
             // 5. Update Text Area
@@ -199,7 +203,8 @@
     function startPicker() {
         // Overlay for initial selection
         const cover = document.createElement('div');
-        Object.assign(cover.id = 'rethread-cover', cover.style, {
+        Object.assign(cover, { id: 'rethread-cover' });
+        Object.assign(cover.style, {
             position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
             zIndex: '9999997', cursor: 'crosshair'
         });
