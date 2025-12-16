@@ -103,6 +103,7 @@ def find_menu_binary() -> list[str] | None:
       (["rofi", "-dmenu"], "rofi"),
       (["dmenu"], "dmenu"),
       (["bemenu"], "bemenu"),
+      (["tofi"], "tofi"),
       (["menu", "x"], "menu"),
   ]
   for command, binary in candidates:
