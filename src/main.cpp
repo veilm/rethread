@@ -9,6 +9,7 @@
 #include <QGuiApplication>
 #include <QPalette>
 #include <QRegularExpression>
+#include <QStringList>
 #include <QStyle>
 #include <QStyleHints>
 #include <QString>
@@ -261,6 +262,37 @@ QString ComposeChromiumFlags(const QStringList& flag_list) {
   return flag_list.join(QLatin1Char(' '));
 }
 
+void EnsureChromiumFeatureEnabled(const QString& feature_name) {
+  const QByteArray env = qgetenv("QTWEBENGINE_CHROMIUM_FLAGS");
+  QStringList flags = SplitChromiumFlags(QString::fromUtf8(env));
+  QStringList other_flags;
+  QStringList feature_entries;
+  const QString prefix = QStringLiteral("--enable-features=");
+  for (const QString& flag : flags) {
+    if (flag.startsWith(prefix)) {
+      const QString payload = flag.mid(prefix.size());
+      if (!payload.isEmpty()) {
+        feature_entries << payload.split(QLatin1Char(','), Qt::SkipEmptyParts);
+      }
+    } else {
+      other_flags << flag;
+    }
+  }
+
+  if (!feature_entries.contains(feature_name)) {
+    feature_entries << feature_name;
+  }
+
+  if (!feature_entries.isEmpty()) {
+    const QString merged = QStringLiteral("--enable-features=%1")
+                               .arg(feature_entries.join(QLatin1Char(',')));
+    other_flags << merged;
+  }
+
+  QString final_flags = ComposeChromiumFlags(other_flags);
+  qputenv("QTWEBENGINE_CHROMIUM_FLAGS", final_flags.toUtf8());
+}
+
 QMap<QString, QString> ParseBlinkSettings(const QStringList& values) {
   QMap<QString, QString> map;
   for (const QString& entry : values) {
@@ -372,6 +404,7 @@ int main(int argc, char* argv[]) {
 
   rethread::ColorScheme scheme = ParseColorSchemeFlag(cli.color_scheme);
   ApplyChromiumColorPreference(scheme);
+  EnsureChromiumFeatureEnabled(QStringLiteral("OverlayScrollbar"));
   QApplication app(argc, argv);
   ApplyQtPalette(app, scheme);
 
