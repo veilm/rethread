@@ -90,6 +90,12 @@ class TabManager : public QObject {
   void ApplyRulesToAllTabs() const;
   void CloseDevTools(QWebEnginePage* page, bool close_view);
 
+  struct DevToolsWindow {
+    QPointer<QWebEngineView> view;
+    QPointer<QWebEnginePage> inspected_page;
+    QPointer<QWebEnginePage> devtools_page;
+  };
+
   QWebEngineProfile* profile_ = nullptr;
   QColor background_color_;
   ContextMenuBindingManager* context_menu_binding_manager_ = nullptr;
@@ -97,8 +103,7 @@ class TabManager : public QObject {
   QStackedWidget* stack_ = nullptr;
   std::vector<std::unique_ptr<TabEntry>> tabs_;
   int next_tab_id_ = 1;
-  std::unordered_map<QWebEnginePage*, QPointer<QWebEngineView>>
-      devtools_windows_;
+  std::unordered_map<QWebEnginePage*, DevToolsWindow> devtools_windows_;
 };
 
 }  // namespace rethread
