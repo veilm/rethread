@@ -214,7 +214,9 @@ rethread eval --tab-id=7 "({title: document.title, url: location.href})"
 ```
 
 The command prints the JSON-encoded return value (strings stay quoted, objects
-and arrays render as expected). Errors bubble up as `ERR ...` lines.
+and arrays render as expected). If your snippet returns a `Promise`, rethread
+waits for it to settle before printing the resolved value (or propagating the
+rejection). Errors bubble up as `ERR ...` lines.
 
 ## support
 
