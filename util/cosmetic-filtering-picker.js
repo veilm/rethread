@@ -87,12 +87,8 @@
         // -- DEPTH CONTROL --
         const depthRow = h('div', { display: 'flex', flexDirection: 'column', gap: '4px'});
         depthRow.appendChild(h('label', { fontSize: '12px', color: '#aaa'}, 'Depth (Parent Level)'));
-        const depthSlider = h('input');
-        depthSlider.type = 'range';
-        depthSlider.min = 0; 
-        depthSlider.max = 4; // Allow going up 4 parents
-        depthSlider.value = 0;
-        depthRow.appendChild(depthSlider);
+        const depthSelect = h('select', { padding: '4px', backgroundColor: '#333', color: '#fff', border: '1px solid #555' });
+        depthRow.appendChild(depthSelect);
         container.appendChild(depthRow);
 
         // -- SPECIFICITY CONTROL --
@@ -121,6 +117,31 @@
 
         // --- 4. STATE LOGIC ---
 
+        const ancestorChain = (() => {
+            const chain = [];
+            let node = originalTarget;
+            let depth = 0;
+            while (node && depth <= 4) {
+                chain.push(node);
+                if (!node.parentElement || node.parentElement.tagName === 'BODY') break;
+                node = node.parentElement;
+                depth++;
+            }
+            return chain;
+        })();
+
+        const populateDepthDropdown = () => {
+            depthSelect.innerHTML = '';
+            ancestorChain.forEach((node, idx) => {
+                const option = document.createElement('option');
+                option.value = String(idx);
+                const tag = node.tagName ? node.tagName.toLowerCase() : 'unknown';
+                option.textContent = idx === 0 ? `Target (${tag})` : `Parent ${idx} (${tag})`;
+                depthSelect.appendChild(option);
+            });
+            depthSelect.value = depthSelect.value || '0';
+        };
+
         const updatePreview = () => {
             const selector = textArea.value.trim();
             let previewElements = [];
@@ -139,14 +160,8 @@
 
         const updateState = () => {
             // 1. Calculate Target based on Depth
-            let level = parseInt(depthSlider.value);
-            let el = originalTarget;
-            for (let i = 0; i < level; i++) {
-                if (el.parentElement && el.parentElement.tagName !== 'BODY') {
-                    el = el.parentElement;
-                }
-            }
-            currentTarget = el;
+            const level = Math.min(parseInt(depthSelect.value, 10) || 0, ancestorChain.length - 1);
+            currentTarget = ancestorChain[level];
 
             // 2. Generate options for this target
             const options = generateSelectors(currentTarget);
@@ -157,7 +172,7 @@
             options.forEach(opt => {
                 const o = document.createElement('option');
                 o.value = opt.value;
-                o.textContent = `${opt.label}: ${opt.value.substring(0, 20)}...`;
+                o.textContent = `${opt.label}: ${opt.value}`;
                 specSelect.appendChild(o);
             });
             
@@ -178,7 +193,7 @@
         };
 
         // Listeners
-        depthSlider.oninput = updateState;
+        depthSelect.onchange = updateState;
         specSelect.onchange = () => { textArea.value = specSelect.value; updatePreview(); };
         textArea.oninput = updatePreview;
         
@@ -197,6 +212,7 @@
         };
 
         // Initialize
+        populateDepthDropdown();
         updateState();
     }
 
