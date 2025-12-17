@@ -119,6 +119,9 @@ const PICKER_CONFIG = {
   let textCheck = null;
   let textInput = null;
   let textWarning = null;
+  const iframeListeners = new Map();
+  let iframeObserver = null;
+  let interactionBlocker = null;
 
   function ensureHighlightLayer() {
     if (!highlightLayer) {
@@ -232,6 +235,82 @@ const PICKER_CONFIG = {
       window.removeEventListener('resize', viewportListener);
       viewportListener = null;
     }
+  }
+
+  function bindIframe(frame) {
+    if (!frame || iframeListeners.has(frame)) return;
+    const onEnter = () => {
+      if (!state.picking) return;
+      state.element = frame;
+      update();
+    };
+    frame.addEventListener('mouseenter', onEnter);
+    iframeListeners.set(frame, { onEnter });
+  }
+
+  function unbindIframe(frame) {
+    const handlers = iframeListeners.get(frame);
+    if (!handlers) return;
+    frame.removeEventListener('mouseenter', handlers.onEnter);
+    iframeListeners.delete(frame);
+  }
+
+  function refreshIframeBindings() {
+    const frames = Array.from(document.querySelectorAll('iframe'));
+    frames.forEach(bindIframe);
+    Array.from(iframeListeners.keys()).forEach(frame => {
+      if (!frame.isConnected) unbindIframe(frame);
+    });
+  }
+
+  function startIframeMonitoring() {
+    if (iframeObserver) return;
+    refreshIframeBindings();
+    iframeObserver = new MutationObserver(refreshIframeBindings);
+    iframeObserver.observe(document.body, { childList: true, subtree: true });
+  }
+
+  function stopIframeMonitoring() {
+    if (iframeObserver) {
+      iframeObserver.disconnect();
+      iframeObserver = null;
+    }
+    iframeListeners.forEach((handlers, frame) => {
+      frame.removeEventListener('mouseenter', handlers.onEnter);
+    });
+    iframeListeners.clear();
+  }
+
+  function ensureInteractionBlocker() {
+    if (!interactionBlocker) {
+      interactionBlocker = document.createElement('div');
+      Object.assign(interactionBlocker.style, {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        background: 'transparent',
+        cursor: 'crosshair',
+        zIndex: 2147483645
+      });
+      document.body.appendChild(interactionBlocker);
+    }
+    return interactionBlocker;
+  }
+
+  function removeInteractionBlocker() {
+    if (!interactionBlocker) return;
+    interactionBlocker.remove();
+    interactionBlocker = null;
+  }
+
+  function getElementAtPoint(x, y) {
+    if (!interactionBlocker) return document.elementFromPoint(x, y);
+    interactionBlocker.style.pointerEvents = 'none';
+    const el = document.elementFromPoint(x, y);
+    interactionBlocker.style.pointerEvents = 'auto';
+    return el;
   }
 
   // Generates selectors at different specificity levels
@@ -357,7 +436,7 @@ const PICKER_CONFIG = {
   // Event Handlers
   const onMove = (e) => {
     if (!state.picking) return;
-    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const el = getElementAtPoint(e.clientX, e.clientY);
     if (el && !host.contains(el)) {
       state.element = el;
       update();
@@ -370,17 +449,34 @@ const PICKER_CONFIG = {
     e.stopPropagation();
     
     if (state.picking) {
-      state.picking = false;
-      state.original = state.element;
-      panel.style.display = 'flex';
-      setHighlights(state.element, []);
-      update();
+      finalizeSelection();
     }
   };
 
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('click', onClick, { capture: true });
+  function finalizeSelection() {
+    if (!state.element) return;
+    state.picking = false;
+    state.original = state.element;
+    panel.style.display = 'flex';
+    setHighlights(state.element, []);
+    update();
+  }
+
+  const onIframeFocus = (e) => {
+    if (!state.picking) return;
+    const target = e.target;
+    if (target && target.tagName && target.tagName.toLowerCase() === 'iframe') {
+      state.element = target;
+      finalizeSelection();
+    }
+  };
+
+  const blocker = ensureInteractionBlocker();
+  blocker.addEventListener('mousemove', onMove);
+  blocker.addEventListener('click', onClick);
+  document.addEventListener('focusin', onIframeFocus);
   attachViewportListeners();
+  startIframeMonitoring();
 
   // Panel Inputs
   shadow.getElementById('up').onclick = () => {
@@ -434,10 +530,15 @@ const PICKER_CONFIG = {
   };
 
   function cleanup() {
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('click', onClick, { capture: true });
+    document.removeEventListener('focusin', onIframeFocus);
     detachViewportListeners();
+    stopIframeMonitoring();
     clearHighlightLayer();
+    if (interactionBlocker) {
+      interactionBlocker.removeEventListener('mousemove', onMove);
+      interactionBlocker.removeEventListener('click', onClick);
+      removeInteractionBlocker();
+    }
     host.remove();
   }
 }))();
