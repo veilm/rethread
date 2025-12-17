@@ -13,6 +13,8 @@
 #include <QVariant>
 #include <unordered_map>
 
+#include <QWebChannel>
+
 class QStackedWidget;
 class QWebEngineProfile;
 class QWebEngineView;
@@ -23,6 +25,7 @@ namespace rethread {
 class ContextMenuBindingManager;
 class RulesManager;
 class WebView;
+class JsEvalBridge;
 
 class TabManager : public QObject {
   Q_OBJECT
@@ -77,6 +80,10 @@ class TabManager : public QObject {
     QString title;
     bool active = false;
     WebView* view = nullptr;
+    std::unique_ptr<QWebChannel> eval_channel;
+    std::unique_ptr<JsEvalBridge> eval_bridge;
+    int next_eval_request_id = 1;
+    bool eval_bridge_ready = false;
   };
 
   TabEntry* findById(int id);
@@ -89,6 +96,7 @@ class TabManager : public QObject {
   void ApplyRulesToView(WebView* view, const QUrl& url) const;
   void ApplyRulesToAllTabs() const;
   void CloseDevTools(QWebEnginePage* page, bool close_view);
+  void EnsureEvalBridge(TabEntry* tab);
 
   struct DevToolsWindow {
     QPointer<QWebEngineView> view;

@@ -4,19 +4,23 @@
 
 #include <QCoreApplication>
 #include <QEventLoop>
-#include <QJsonArray>
-#include <QJsonDocument>
+#include <QFile>
 #include <QSizePolicy>
 #include <QStackedWidget>
+#include <QTimer>
 #include <QUrl>
+#include <QWebChannel>
 #include <QWebEngineHistory>
-#include <QWebEngineProfile>
 #include <QWebEnginePage>
+#include <QWebEngineProfile>
 #include <QWebEngineScript>
+#include <QWebEngineScriptCollection>
 #include <QWebEngineSettings>
 #include <QWebEngineView>
+#include <QDebug>
 
 #include "browser/context_menu_binding_manager.h"
+#include "browser/js_eval_bridge.h"
 #include "browser/rules_manager.h"
 #include "browser/web_page.h"
 #include "browser/web_view.h"
@@ -27,16 +31,137 @@ QString TabTitleOrUrl(const QString& title, const QString& url) {
   return title.isEmpty() ? url : title;
 }
 
-QString QuoteForJsString(const QString& text) {
-  QJsonArray wrapper;
-  wrapper.append(text);
-  QJsonDocument doc(wrapper);
-  const QByteArray raw = doc.toJson(QJsonDocument::Compact);
-  if (raw.size() >= 2 && raw.front() == '[' && raw.back() == ']') {
-    return QString::fromUtf8(raw.mid(1, raw.size() - 2));
+QString EvalHelperSource() {
+  static QString cached;
+  if (!cached.isEmpty()) {
+    return cached;
   }
-  return QStringLiteral("\"\"");
+
+  QString script;
+  QFile qweb_file(QStringLiteral(":/qtwebchannel/qwebchannel.js"));
+  if (qweb_file.open(QIODevice::ReadOnly)) {
+    script.append(QString::fromUtf8(qweb_file.readAll()));
+    qweb_file.close();
+  } else {
+    qWarning() << "Failed to load qwebchannel.js for eval bridge";
+  }
+
+  script.append(QStringLiteral(R"JS(
+(function() {
+  if (window.__rethreadEvalBridgeInstalled) {
+    return;
+  }
+  window.__rethreadEvalBridgeInstalled = true;
+  function install(channel) {
+    if (!channel.__rethreadPatched) {
+      channel.__rethreadPatched = true;
+      var storedCallbacks = channel.execCallbacks || {};
+      var noop = function() {};
+      channel.execCallbacks = new Proxy(storedCallbacks, {
+        get: function(target, prop) {
+          var value = target[prop];
+          return typeof value === 'function' ? value : noop;
+        },
+        set: function(target, prop, value) {
+          target[prop] = value;
+          return true;
+        },
+        deleteProperty: function(target, prop) {
+          delete target[prop];
+          return true;
+        }
+      });
+    }
+
+    var bridge = channel.objects.rethreadEvalBridge;
+    if (!bridge) {
+      console.warn('[rethread] eval helper missing bridge object; objects=', Object.keys(channel.objects || {}));
+      return;
+    }
+
+    var evalSignal = bridge.evalRequested || bridge.EvalRequested;
+    var resolveMethod = bridge.resolve || bridge.Resolve;
+    var rejectMethod = bridge.reject || bridge.Reject;
+    var readyMethod = bridge.notifyReady || bridge.NotifyReady;
+    if (!evalSignal || !resolveMethod || !rejectMethod || !readyMethod) {
+      console.warn('[rethread] eval helper missing slots/signals');
+      return;
+    }
+
+    readyMethod.call(bridge);
+
+    evalSignal.connect(function(requestId, source) {
+      var finished = false;
+      function finish(ok, value) {
+        if (finished || !bridge) {
+          return;
+        }
+        finished = true;
+        if (ok) {
+          resolveMethod.call(bridge, requestId, value);
+        } else {
+          var message = value;
+          if (message && typeof message === 'object' && message.message) {
+            message = message.message;
+          }
+          rejectMethod.call(bridge, requestId, String(message !== undefined ? message : 'Unknown error'));
+        }
+      }
+      try {
+        var result = (0, eval)(source);
+        if (result && typeof result.then === 'function') {
+          Promise.resolve(result).then(function(value) {
+            finish(true, value);
+          }, function(err) {
+            finish(false, err);
+          });
+        } else {
+          finish(true, result);
+        }
+      } catch (error) {
+        finish(false, error);
+      }
+    });
+  }
+
+  function initChannel() {
+    if (!window.qt || !window.qt.webChannelTransport) {
+      window.setTimeout(initChannel, 50);
+      return;
+    }
+    new QWebChannel(window.qt.webChannelTransport, install);
+  }
+
+  initChannel();
+})();
+)JS"));
+
+  cached = script;
+  return cached;
 }
+
+void InstallEvalHelperScript(QWebEnginePage* page) {
+  if (!page) {
+    return;
+  }
+  QWebEngineScriptCollection* collection = &page->scripts();
+  const auto existing =
+      collection->find(QStringLiteral("rethread_eval_helper"));
+  if (!existing.isEmpty()) {
+    return;
+  }
+
+  QWebEngineScript script;
+  script.setName(QStringLiteral("rethread_eval_helper"));
+  script.setInjectionPoint(QWebEngineScript::DocumentCreation);
+  script.setRunsOnSubFrames(false);
+  script.setWorldId(QWebEngineScript::MainWorld);
+  script.setSourceCode(EvalHelperSource());
+  collection->insert(script);
+  page->runJavaScript(EvalHelperSource(), QWebEngineScript::MainWorld);
+}
+
+constexpr int kEvalReadyTimeoutMs = 3000;
 }  // namespace
 
 TabManager::TabManager(QWebEngineProfile* profile,
@@ -160,12 +285,47 @@ int TabManager::openTab(const QUrl& url, bool activate, bool append_to_end) {
   if (!url.isEmpty()) {
     view->setUrl(url);
   }
+  EnsureEvalBridge(tab_ptr);
   applyActiveState();
   notifyTabsChanged();
   if (tab_ptr->active && tab_ptr->view) {
     tab_ptr->view->setFocus();
   }
   return tab_ptr->id;
+}
+
+void TabManager::EnsureEvalBridge(TabEntry* tab) {
+  if (!tab || tab->eval_bridge || !tab->view) {
+    return;
+  }
+  QWebEnginePage* page = tab->view->page();
+  if (!page) {
+    return;
+  }
+  InstallEvalHelperScript(page);
+
+  auto bridge = std::make_unique<JsEvalBridge>();
+  const int tab_id = tab->id;
+  QObject::connect(bridge.get(), &JsEvalBridge::Ready, tab->view,
+                   [this, tab_id]() {
+                     if (TabEntry* entry = findById(tab_id)) {
+                       entry->eval_bridge_ready = true;
+                     }
+                   });
+  QObject::connect(page, &QWebEnginePage::loadStarted, tab->view,
+                   [this, tab_id]() {
+                     if (TabEntry* entry = findById(tab_id)) {
+                       entry->eval_bridge_ready = false;
+                     }
+                   });
+
+  auto channel = std::make_unique<QWebChannel>(tab->view);
+  channel->registerObject(QStringLiteral("rethreadEvalBridge"),
+                          bridge.get());
+  page->setWebChannel(channel.get());
+  tab->eval_bridge_ready = false;
+  tab->eval_bridge = std::move(bridge);
+  tab->eval_channel = std::move(channel);
 }
 
 bool TabManager::activateTab(int id) {
@@ -469,7 +629,7 @@ bool TabManager::EvaluateJavaScript(const QString& script,
     }
     return false;
   }
-  const TabEntry* target = nullptr;
+  TabEntry* target = nullptr;
   if (tab_id > 0) {
     target = findById(tab_id);
     if (!target) {
@@ -507,54 +667,100 @@ bool TabManager::EvaluateJavaScript(const QString& script,
     return false;
   }
 
-  QEventLoop loop;
-  QVariant callback_result;
-  bool callback_invoked = false;
-  QWebEngineView* view = target->view;
-  if (!view) {
+  EnsureEvalBridge(target);
+  if (!target->eval_bridge) {
     if (error_message) {
-      *error_message = QStringLiteral("tab has no view");
+      *error_message = QStringLiteral("eval bridge unavailable");
     }
     return false;
   }
 
-  const QString wrapper = QStringLiteral(
-      "(function(){"
-      "  try {"
-      "    return (0, eval)(%1);"
-      "  } catch (error) {"
-      "    return {__rethreadEvalError:true,"
-      "            message:String(error && error.message ? error.message : error)};"
-      "  }"
-      "})()")
-                              .arg(QuoteForJsString(script));
-
-  view->page()->runJavaScript(
-      wrapper, QWebEngineScript::ApplicationWorld,
-      [&loop, &callback_result, &callback_invoked](const QVariant& value) {
-        callback_invoked = true;
-        callback_result = value;
-        loop.quit();
-      });
-  loop.exec();
-  if (result) {
-    *result = callback_result;
-  }
-  if (callback_result.canConvert<QVariantMap>()) {
-    const QVariantMap map = callback_result.toMap();
-    if (map.value(QStringLiteral("__rethreadEvalError")) == true) {
+  if (!target->eval_bridge_ready) {
+    QEventLoop ready_loop;
+    QMetaObject::Connection ready_conn = QObject::connect(
+        target->eval_bridge.get(), &JsEvalBridge::Ready, &ready_loop,
+        &QEventLoop::quit);
+    QTimer ready_timer;
+    ready_timer.setSingleShot(true);
+    QObject::connect(&ready_timer, &QTimer::timeout, &ready_loop,
+                     &QEventLoop::quit);
+    ready_timer.start(kEvalReadyTimeoutMs);
+    ready_loop.exec();
+    QObject::disconnect(ready_conn);
+    if (!target->eval_bridge_ready) {
       if (error_message) {
-        *error_message = map.value(QStringLiteral("message"))
-                             .toString()
-                             .trimmed();
+        *error_message = QStringLiteral("eval environment unavailable");
       }
       return false;
     }
   }
-  if (!callback_invoked && error_message) {
-    *error_message = QStringLiteral("script did not produce a result");
+
+  const int request_id = target->next_eval_request_id++;
+  QEventLoop loop;
+  QVariant callback_result;
+  QString callback_error;
+  bool completed = false;
+  bool success = false;
+
+  QPointer<WebView> view_guard(target->view);
+  QObject::connect(target->eval_bridge.get(), &QObject::destroyed, &loop,
+                   &QEventLoop::quit);
+  if (view_guard) {
+    QObject::connect(view_guard.data(), &QObject::destroyed, &loop,
+                     &QEventLoop::quit);
   }
-  return callback_invoked;
+
+  QMetaObject::Connection completion_conn =
+      QObject::connect(target->eval_bridge.get(), &JsEvalBridge::EvalCompleted,
+                       &loop,
+                       [&loop, &completed, &success, &callback_result,
+                        &callback_error, request_id](int completed_id,
+                                                     bool completed_success,
+                                                     const QVariant& value,
+                                                     const QString& error) {
+                         if (completed || completed_id != request_id) {
+                           return;
+                         }
+                         completed = true;
+                         success = completed_success;
+                         if (completed_success) {
+                           callback_result = value;
+                         } else {
+                           callback_error = error;
+                         }
+                         loop.quit();
+                       });
+
+  emit target->eval_bridge->EvalRequested(request_id, script);
+  loop.exec();
+  QObject::disconnect(completion_conn);
+
+  if (!completed) {
+    if (error_message) {
+      if (!view_guard || view_guard.isNull()) {
+        *error_message = QStringLiteral("tab closed during evaluation");
+      } else {
+        *error_message = QStringLiteral("script did not produce a result");
+      }
+    }
+    return false;
+  }
+
+  if (success) {
+    if (result) {
+      *result = callback_result;
+    }
+    return true;
+  }
+
+  if (error_message) {
+    QString message = callback_error.trimmed();
+    if (message.isEmpty()) {
+      message = QStringLiteral("failed to evaluate script");
+    }
+    *error_message = message;
+  }
+  return false;
 }
 
 bool TabManager::closeById(int id) {
