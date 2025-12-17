@@ -2,6 +2,11 @@
    RETHREAD ELEMENT PICKER
    Runs in the browser tab. Returns a Promise that resolves to the filter config.
 */
+const PICKER_CONFIG = {
+  // Controls highlight tweening when moving between selections
+  animationsEnabled: false
+};
+
 (() => new Promise((resolve) => {
   // --- 1. SETUP SHADOW DOM (Isolation) ---
   const ID = 'rethread-picker-ui';
@@ -51,6 +56,7 @@
       color: #cfd3da; word-break: break-all; border: 1px solid #2f333b; font-size: 11px;
     }
     .hint { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+    .hint.warning { color: #ef4444; }
     hr { border:0; border-top:1px solid #2c2f35; width:100%; margin:0; }
   `;
   shadow.appendChild(style);
@@ -87,7 +93,8 @@
         <input type="checkbox" id="use-text">
         <strong>Block if text contains...</strong>
       </label>
-      <input type="text" id="text-val" disabled placeholder="e.g. 'You might like'">
+      <input type="text" id="text-val" disabled placeholder="Enter text to detect">
+      <div class="hint warning" id="text-warning" style="display:none;">Original element doesn't contain that text.</div>
     </div>
 
     <button id="create" class="primary" style="width:100%">Create Filter</button>
@@ -109,6 +116,9 @@
   let highlightedElements = [];
   let highlightedPrimary = null;
   let viewportListener = null;
+  let textCheck = null;
+  let textInput = null;
+  let textWarning = null;
 
   function ensureHighlightLayer() {
     if (!highlightLayer) {
@@ -130,7 +140,7 @@
         position: 'absolute',
         outline: '2px solid rgba(163, 196, 255, 0.95)',
         background: 'rgba(115, 163, 255, 0.12)',
-        transition: 'all 0.1s ease'
+        transition: PICKER_CONFIG.animationsEnabled ? 'all 0.1s ease' : 'none'
       });
       highlightLayer.appendChild(primaryBox);
     }
@@ -168,7 +178,7 @@
         position: 'absolute',
         outline: '2px dashed rgba(255,255,255,0.6)',
         background: 'rgba(255,255,255,0.08)',
-        transition: 'all 0.1s ease'
+        transition: PICKER_CONFIG.animationsEnabled ? 'all 0.1s ease' : 'none'
       });
       highlightLayer.appendChild(box);
       highlightBoxes.push(box);
@@ -266,6 +276,35 @@
     ];
   }
 
+  function getSuggestedText() {
+    const src = state.original || state.element;
+    if (!src) return '';
+    const raw = (src.innerText || '').split('\n')[0].trim();
+    return raw.substring(0, 50);
+  }
+
+  function elementContainsText(el, needleLower) {
+    if (!el || !needleLower) return false;
+    const content = (el.innerText || '').toLowerCase();
+    return content.includes(needleLower);
+  }
+
+  function getActiveTextFilter() {
+    if (!textCheck || !textInput || !textCheck.checked) return '';
+    return textInput.value.trim();
+  }
+
+  function updateTextWarning(needleLower) {
+    if (!textWarning) return;
+    if (!needleLower || !textCheck || !textCheck.checked) {
+      textWarning.style.display = 'none';
+      return;
+    }
+    const target = state.original || state.element;
+    const matches = elementContainsText(target, needleLower);
+    textWarning.style.display = matches ? 'none' : 'block';
+  }
+
   function update() {
     if (!state.element) return;
     
@@ -283,12 +322,11 @@
     shadow.getElementById('preview').textContent = state.selector;
 
     // Auto-suggest text
-    const input = shadow.getElementById('text-val');
-    if (!input.value) {
-      // Prefer text from the original click target, even if we traversed up
-      const src = state.original || state.element;
-      const txt = (src.innerText || "").split('\n')[0].trim().substring(0, 50);
-      if (txt) input.placeholder = `Contains: "${txt}..."`;
+    const input = textInput || shadow.getElementById('text-val');
+    if (!textInput && input) textInput = input;
+    if (input && !input.value) {
+      const suggested = getSuggestedText();
+      if (suggested) input.value = suggested;
     }
 
     refreshMatches();
@@ -305,6 +343,13 @@
     } catch (err) {
       matches = [];
     }
+    const filterText = getActiveTextFilter();
+    let normalized = '';
+    if (filterText) {
+      normalized = filterText.toLowerCase();
+      matches = matches.filter(el => elementContainsText(el, normalized));
+    }
+    updateTextWarning(normalized);
     const others = matches.filter(el => el !== state.element);
     setHighlights(state.element, others);
   }
@@ -358,20 +403,24 @@
   
   shadow.getElementById('strictness').oninput = update;
   
-  const textCheck = shadow.getElementById('use-text');
-  const textInput = shadow.getElementById('text-val');
-  textCheck.onchange = () => { textInput.disabled = !textCheck.checked; };
+  textCheck = shadow.getElementById('use-text');
+  textInput = shadow.getElementById('text-val');
+  textWarning = shadow.getElementById('text-warning');
+  textCheck.onchange = () => {
+    textInput.disabled = !textCheck.checked;
+    refreshMatches();
+  };
+  textInput.oninput = () => {
+    refreshMatches();
+  };
 
   // Finish
   shadow.getElementById('create').onclick = () => {
     const config = { selector: state.selector };
     
     if (textCheck.checked) {
-      // Use user input, or placeholder if empty
-      let val = textInput.value.trim();
-      if (!val && textInput.placeholder.includes('"')) {
-         val = textInput.placeholder.match(/"(.*?)"/)[1]; // Extract from placeholder
-      }
+      // Use the entered (or auto-detected) text value
+      const val = textInput.value.trim();
       if (val) config.hasText = val;
     }
 
