@@ -182,6 +182,7 @@ void BrowserApplication::RunStartupScript() const {
   auto* process = new QProcess(const_cast<BrowserApplication*>(this));
   process->setWorkingDirectory(options_.user_data_dir);
   process->setProcessEnvironment(env);
+  process->setProcessChannelMode(QProcess::ForwardedChannels);
   QObject::connect(
       process,
       QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),

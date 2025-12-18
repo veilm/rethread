@@ -87,6 +87,7 @@ const PICKER_CONFIG = {
       </div>
       <input type="range" id="strictness" min="0" max="3" step="1" value="2">
       <textarea class="code" id="selector-input" spellcheck="false"></textarea>
+      <div class="hint warning" id="selector-warning" style="display:none;">Original element isn't matched by this selector.</div>
       <div class="hint">Slide left to make selector more generic (fixes brittle classes)</div>
     </div>
 
@@ -130,6 +131,7 @@ const PICKER_CONFIG = {
   const downButton = shadow.getElementById('down');
   const strictnessSlider = shadow.getElementById('strictness');
   let selectorInput = shadow.getElementById('selector-input');
+  const selectorWarning = shadow.getElementById('selector-warning');
   let manualOverride = false;
   let lastElement = null;
 
@@ -380,6 +382,22 @@ const PICKER_CONFIG = {
     if (selectorInput && !fromManual) {
       selectorInput.value = state.selector;
     }
+    updateSelectorWarning();
+  }
+
+  function updateSelectorWarning() {
+    if (!selectorWarning) return;
+    if (!state.selector || !state.element || state.picking) {
+      selectorWarning.style.display = 'none';
+      return;
+    }
+    let matches = false;
+    try {
+      matches = state.element.matches(state.selector);
+    } catch (err) {
+      matches = false;
+    }
+    selectorWarning.style.display = matches ? 'none' : 'block';
   }
 
   // Generates selectors at different specificity levels

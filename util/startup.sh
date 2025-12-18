@@ -7,7 +7,13 @@ E="export RETHREAD_USER_DATA_DIR=$RETHREAD_USER_DATA_DIR ;"
 config="${XDG_CONFIG_HOME:-$HOME/.config}/rethread"
 command_menu="$config/rethread-command-menu.py"
 right_click_handler="$config/right-click-handler.py"
+cosmetic_filter="$config/cosmetic-filters.py"
 rethread bind --context-menu "$E $right_click_handler"
+
+if [ -x "$cosmetic_filter" ]; then
+  "$cosmetic_filter" sync
+  rethread bind --alt --key x "$E \"$cosmetic_filter\""
+fi
 
 rethread bind --ctrl --key t "$E rethread tabs open 'https://veilm.github.io/rethread/' ; $peek"
 rethread bind --alt --shift --key o "$E rethread tabs open 'https://veilm.github.io/rethread/' ; $peek"
