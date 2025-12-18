@@ -7,7 +7,7 @@ const PICKER_CONFIG = {
   animationsEnabled: false
 };
 
-(() => new Promise((resolve) => {
+return (() => new Promise((resolve) => {
   // --- 1. SETUP SHADOW DOM (Isolation) ---
   const ID = 'rethread-picker-ui';
   if (document.getElementById(ID)) return; // Prevent multiple instances

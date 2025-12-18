@@ -15,9 +15,6 @@ class JsEvalBridge : public QObject {
   explicit JsEvalBridge(QObject* parent = nullptr);
 
  signals:
-  // Emitted to request JS to evaluate |script| for |request_id|.
-  void EvalRequested(int request_id, const QString& script);
-
   // Emitted whenever JS reports completion for a request.
   void EvalCompleted(int request_id,
                      bool success,
