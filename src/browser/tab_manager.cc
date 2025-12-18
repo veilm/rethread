@@ -79,49 +79,28 @@ QString EvalHelperSource() {
       return;
     }
 
-    var evalSignal = bridge.evalRequested || bridge.EvalRequested;
     var resolveMethod = bridge.resolve || bridge.Resolve;
     var rejectMethod = bridge.reject || bridge.Reject;
     var readyMethod = bridge.notifyReady || bridge.NotifyReady;
-    if (!evalSignal || !resolveMethod || !rejectMethod || !readyMethod) {
+    if (!resolveMethod || !rejectMethod || !readyMethod) {
       console.warn('[rethread] eval helper missing slots/signals');
       return;
     }
 
-    readyMethod.call(bridge);
+    window.__rethreadPromiseBridge = {
+      resolve: function(requestId, value) {
+        resolveMethod.call(bridge, requestId, value);
+      },
+      reject: function(requestId, value) {
+        var message = value;
+        if (message && typeof message === 'object' && message.message) {
+          message = message.message;
+        }
+        rejectMethod.call(bridge, requestId, String(message !== undefined ? message : 'Unknown error'));
+      }
+    };
 
-    evalSignal.connect(function(requestId, source) {
-      var finished = false;
-      function finish(ok, value) {
-        if (finished || !bridge) {
-          return;
-        }
-        finished = true;
-        if (ok) {
-          resolveMethod.call(bridge, requestId, value);
-        } else {
-          var message = value;
-          if (message && typeof message === 'object' && message.message) {
-            message = message.message;
-          }
-          rejectMethod.call(bridge, requestId, String(message !== undefined ? message : 'Unknown error'));
-        }
-      }
-      try {
-        var result = (0, eval)(source);
-        if (result && typeof result.then === 'function') {
-          Promise.resolve(result).then(function(value) {
-            finish(true, value);
-          }, function(err) {
-            finish(false, err);
-          });
-        } else {
-          finish(true, result);
-        }
-      } catch (error) {
-        finish(false, error);
-      }
-    });
+    readyMethod.call(bridge);
   }
 
   function initChannel() {
@@ -162,6 +141,69 @@ void InstallEvalHelperScript(QWebEnginePage* page) {
 }
 
 constexpr int kEvalReadyTimeoutMs = 3000;
+
+QString BuildEvalWrapper(const QString& script, int request_id) {
+  QString wrapper = QStringLiteral(
+      R"JS(
+(function() {
+  const __RETHREAD_REQUEST_ID__ = __REQUEST_ID__;
+  const __RETHREAD_BRIDGE__ = window.__rethreadPromiseBridge || null;
+  function __rethreadFormatError(err) {
+    if (!err) {
+      return "Unknown error";
+    }
+    if (typeof err === "string") {
+      return err;
+    }
+    if (err && typeof err === "object") {
+      if (err.message) {
+        return err.message;
+      }
+      try {
+        return JSON.stringify(err);
+      } catch (jsonErr) {
+        void jsonErr;
+      }
+    }
+    return String(err);
+  }
+  try {
+    const __RETHREAD_RESULT__ = (async function() {
+__RETHREAD_USER_CODE__
+    })();
+    if (__RETHREAD_RESULT__ && typeof __RETHREAD_RESULT__.then === "function") {
+      Promise.resolve(__RETHREAD_RESULT__).then(
+        function(value) {
+          if (__RETHREAD_BRIDGE__ && __RETHREAD_BRIDGE__.resolve) {
+            __RETHREAD_BRIDGE__.resolve(__RETHREAD_REQUEST_ID__, value);
+          }
+        },
+        function(error) {
+          if (__RETHREAD_BRIDGE__ && __RETHREAD_BRIDGE__.reject) {
+            __RETHREAD_BRIDGE__.reject(__RETHREAD_REQUEST_ID__, __rethreadFormatError(error));
+          }
+        }
+      );
+      return { status: "promise", id: __RETHREAD_REQUEST_ID__ };
+    }
+    return { status: "ok", id: __RETHREAD_REQUEST_ID__, value: __RETHREAD_RESULT__ };
+  } catch (err) {
+    return { status: "error", id: __RETHREAD_REQUEST_ID__, error: __rethreadFormatError(err) };
+  }
+})();
+)JS");
+  wrapper.replace(QStringLiteral("__REQUEST_ID__"),
+                  QString::number(request_id));
+  QString indented_script = script;
+  indented_script.replace(QStringLiteral("\r"), QStringLiteral(""));
+  indented_script.replace(QStringLiteral("\n"),
+                          QStringLiteral("\n    "));
+  if (!indented_script.startsWith(QStringLiteral("    "))) {
+    indented_script.prepend(QStringLiteral("    "));
+  }
+  wrapper.replace(QStringLiteral("__RETHREAD_USER_CODE__"), indented_script);
+  return wrapper;
+}
 }  // namespace
 
 TabManager::TabManager(QWebEngineProfile* profile,
@@ -731,8 +773,48 @@ bool TabManager::EvaluateJavaScript(const QString& script,
                          loop.quit();
                        });
 
-  emit target->eval_bridge->EvalRequested(request_id, script);
-  loop.exec();
+  auto* page = target->view->page();
+  const QString wrapped = BuildEvalWrapper(script, request_id);
+  page->runJavaScript(wrapped, QWebEngineScript::MainWorld,
+                      [&loop, &completed, &success, &callback_result,
+                       &callback_error](
+                          const QVariant& value) {
+                        if (completed) {
+                          return;
+                        }
+                        const QVariantMap map = value.toMap();
+                        const QString status = map.value(
+                            QStringLiteral("status")).toString();
+                        if (status == QStringLiteral("promise")) {
+                          return;
+                        }
+                        if (status == QStringLiteral("ok")) {
+                          completed = true;
+                          success = true;
+                          callback_result = map.value(QStringLiteral("value"));
+                          loop.quit();
+                          return;
+                        }
+                        if (status == QStringLiteral("error")) {
+                          completed = true;
+                          success = false;
+                          callback_error = map
+                                               .value(QStringLiteral("error"))
+                                               .toString();
+                          loop.quit();
+                          return;
+                        }
+                        // Fallback: treat plain values as success.
+                        completed = true;
+                        success = true;
+                        callback_result =
+                            status.isEmpty() ? value : QVariant(map);
+                        loop.quit();
+                      });
+
+  if (!completed) {
+    loop.exec();
+  }
   QObject::disconnect(completion_conn);
 
   if (!completed) {
