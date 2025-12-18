@@ -37,6 +37,7 @@ so you can pre-register keybindings or tweak state declaratively.
 `--at-end` to append to the end of the strip when you need the old behavior.
 
 TODO better docs, this Codex output is messy
+	a lot of it is just wrong or misleading too. not highest prior right now though
 
 ## key bindings
 
@@ -132,9 +133,10 @@ with mixed modes in memory.
 ## userscripts
 
 Use `rethread scripts` to manage Greasemonkey-style userscripts per profile.
-Scripts are saved under
-`$XDG_DATA_HOME/rethread/PROFILE/scripts/<id>.user.js` and are loaded whenever
-the browser starts.
+Scripts live under `$XDG_DATA_HOME/rethread/PROFILE/scripts/<id>.user.js`.
+They are only active for the current browser session unless you call
+`rethread scripts add` again after restarting (the CLI keeps the files around
+so you can re-register them later).
 
 ```
 # add or replace a script (reads stdin)

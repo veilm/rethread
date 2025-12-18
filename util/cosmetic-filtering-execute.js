@@ -1,6 +1,8 @@
+// Helper template used by cosmetic-filters.py. Keep the @match target and
+// CONFIG initializer anchors intact so the helper can rewrite them.
 // ==UserScript==
 // @name        Rethread Cosmetic Filter
-// @match       https://example.com/*
+// @match       __RETHREAD_PICKER_MATCH__
 // @run-at      document-start
 // ==/UserScript==
 
@@ -14,7 +16,12 @@
          { selector: "div[role='complementary'] > div", hasText: "You might like" }
        ];
     */
-    const CONFIG = []; 
+    let CONFIG = [];
+    try {
+        CONFIG = __RETHREAD_PICKER_CONFIG__;
+    } catch (err) {
+        CONFIG = [];
+    }
 
     if (!CONFIG || !CONFIG.length) return;
 
