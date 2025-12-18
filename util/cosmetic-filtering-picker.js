@@ -42,6 +42,7 @@ const PICKER_CONFIG = {
     button:hover { background: #363a42; }
     button.primary { background: #f3f4f6; color: #111; border-color: transparent; font-weight: 600; }
     button.primary:hover { background: #e5e7eb; }
+    button:disabled { opacity: 0.35; cursor: not-allowed; }
     
     label { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; color: #d1d5db; }
     input[type="range"] { width: 100%; accent-color: #9ca3af; }
@@ -54,6 +55,9 @@ const PICKER_CONFIG = {
     .code { 
       font-family: monospace; background: #0d0f14; padding: 8px; border-radius: 6px; 
       color: #cfd3da; word-break: break-all; border: 1px solid #2f333b; font-size: 11px;
+    }
+    textarea.code {
+      width: 100%; min-height: 52px; resize: vertical; box-sizing: border-box; line-height: 1.4;
     }
     .hint { font-size: 11px; color: #9ca3af; margin-top: 2px; }
     .hint.warning { color: #ef4444; }
@@ -82,7 +86,7 @@ const PICKER_CONFIG = {
         <span id="level-label" style="color:#888; font-size:11px">Smart</span>
       </div>
       <input type="range" id="strictness" min="0" max="3" step="1" value="2">
-      <div class="code" id="preview"></div>
+      <textarea class="code" id="selector-input" spellcheck="false"></textarea>
       <div class="hint">Slide left to make selector more generic (fixes brittle classes)</div>
     </div>
 
@@ -122,6 +126,12 @@ const PICKER_CONFIG = {
   const iframeListeners = new Map();
   let iframeObserver = null;
   let interactionBlocker = null;
+  const upButton = shadow.getElementById('up');
+  const downButton = shadow.getElementById('down');
+  const strictnessSlider = shadow.getElementById('strictness');
+  let selectorInput = shadow.getElementById('selector-input');
+  let manualOverride = false;
+  let lastElement = null;
 
   function ensureHighlightLayer() {
     if (!highlightLayer) {
@@ -281,6 +291,57 @@ const PICKER_CONFIG = {
     iframeListeners.clear();
   }
 
+  const escapeAttrValue = (value) => (value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const escapeIdentifier = (value) => {
+    if (!value) return '';
+    if (window.CSS && CSS.escape) return CSS.escape(value);
+    return value.replace(/[^a-zA-Z0-9_-]/g, (ch) => `\\${ch}`);
+  };
+
+  function getIdSelectors(el) {
+    const id = el && el.id ? String(el.id) : '';
+    if (!id) return [];
+    const selectors = [];
+    if (/^[A-Za-z_][A-Za-z0-9_-]*$/.test(id)) {
+      selectors.push(`#${escapeIdentifier(id)}`);
+    } else {
+      selectors.push(`[id="${escapeAttrValue(id)}"]`);
+    }
+    const digitIndex = id.search(/[0-9]/);
+    if (digitIndex > 0) {
+      const prefix = id.slice(0, digitIndex);
+      if (prefix.length > 2) {
+        selectors.push(`[id^="${escapeAttrValue(prefix)}"]`);
+      }
+    }
+    return selectors;
+  }
+
+  function getSrcSelector(el) {
+    if (!el || !el.getAttribute) return '';
+    const tag = el.tagName.toLowerCase();
+    if (tag !== 'iframe' && tag !== 'img') return '';
+    const raw = el.getAttribute('src');
+    if (!raw) return '';
+    try {
+      const url = new URL(raw, location.href);
+      const host = url.hostname.replace(/^www\./, '');
+      if (host) return `[src*="${escapeAttrValue(host)}"]`;
+    } catch (err) {
+      if (raw.includes('/')) {
+        const segments = raw.split('/');
+        const candidate = segments.find(seg => seg.includes('.'));
+        if (candidate) return `[src*="${escapeAttrValue(candidate)}"]`;
+      }
+    }
+    return `[src="${escapeAttrValue(raw)}"]`;
+  }
+
+  function pushUnique(arr, value) {
+    if (!value) return;
+    if (!arr.includes(value)) arr.push(value);
+  }
+
   function ensureInteractionBlocker() {
     if (!interactionBlocker) {
       interactionBlocker = document.createElement('div');
@@ -313,11 +374,19 @@ const PICKER_CONFIG = {
     return el;
   }
 
+  function setSelectorValue(value, { fromManual = false } = {}) {
+    state.selector = value || '';
+    manualOverride = fromManual;
+    if (selectorInput && !fromManual) {
+      selectorInput.value = state.selector;
+    }
+  }
+
   // Generates selectors at different specificity levels
   // 0: Generic Tag (div) - Risk of false positives unless combined with Text
   // 1: Tag + Nth (div:nth-of-type(3)) - Good for structure
-  // 2: Smart Class (div.content) - Tries to pick "good" classes, ignores random hashes
-  // 3: Strict Path (body > div#app > div.sidebar) - Very specific, brittle
+  // 2: Attribute-based (src/id/classes) - Prefers ids/src domains when available
+  // 3: Strict Path (body > div#app > div.sidebar) OR Attribute fallback
   function getSelectorOptions(el) {
     if (!el) return [];
     const tag = el.tagName.toLowerCase();
@@ -335,6 +404,16 @@ const PICKER_CONFIG = {
       nth = `:nth-of-type(${idx})`;
     }
 
+    const attrCandidates = [];
+    const srcSelector = getSrcSelector(el);
+    if (srcSelector) pushUnique(attrCandidates, `${tag}${srcSelector}`);
+    const idSelectors = getIdSelectors(el).map(sel => {
+      if (sel.startsWith('#')) return sel;
+      return `${tag}${sel}`;
+    });
+    idSelectors.forEach(sel => pushUnique(attrCandidates, sel));
+    if (classSel) pushUnique(attrCandidates, tag + classSel);
+
     // Path generator
     const getPath = (limit) => {
       let path = tag;
@@ -347,12 +426,42 @@ const PICKER_CONFIG = {
       return path;
     };
 
+    const strictFallback = getPath(2) + (classSel || '');
+    const attrSel = attrCandidates[0] || (tag + classSel) || tag;
+    const strictSel = attrCandidates[1] || strictFallback || attrSel;
+
     return [
       tag,                         // 0: Loose
       tag + nth,                   // 1: Structural
-      tag + classSel,              // 2: Classes (Default)
-      getPath(2) + classSel        // 3: Strict
+      attrSel,                     // 2: Attributes (src/id/classes)
+      strictSel                    // 3: Strict / next-best attribute
     ];
+  }
+
+  function getParentCandidate() {
+    if (!state.element) return null;
+    const parent = state.element.parentElement;
+    if (!parent || parent === document.body) return null;
+    return parent;
+  }
+
+  function getChildCandidate() {
+    if (!state.element) return null;
+    const tag = state.element.tagName.toLowerCase();
+    if (tag === 'iframe') return null; // Can't descend into iframe contents
+    if (state.original && state.element.contains(state.original) && state.element !== state.original) {
+      let curr = state.original;
+      while (curr.parentElement && curr.parentElement !== state.element) {
+        curr = curr.parentElement;
+      }
+      return curr;
+    }
+    return state.element.firstElementChild || null;
+  }
+
+  function updateTraversalButtons() {
+    if (upButton) upButton.disabled = !getParentCandidate();
+    if (downButton) downButton.disabled = !getChildCandidate();
   }
 
   function getSuggestedText() {
@@ -385,20 +494,30 @@ const PICKER_CONFIG = {
   }
 
   function update() {
-    if (!state.element) return;
+    if (!state.element) {
+      updateTraversalButtons();
+      return;
+    }
+
+    if (state.element !== lastElement) {
+      manualOverride = false;
+      lastElement = state.element;
+    }
     
     if (state.picking) {
       setHighlights(state.element, []);
+      updateTraversalButtons();
       return;
     }
 
     // Update Preview
     const opts = getSelectorOptions(state.element);
-    const val = shadow.getElementById('strictness').value;
+    const val = strictnessSlider ? strictnessSlider.value : 0;
     // Fallback if option is empty (e.g. no classes)
-    state.selector = opts[val] || opts[1] || opts[0];
-    
-    shadow.getElementById('preview').textContent = state.selector;
+    if (!manualOverride) {
+      const computed = opts[val] || opts[1] || opts[0] || '';
+      setSelectorValue(computed);
+    }
 
     // Auto-suggest text
     const input = textInput || shadow.getElementById('text-val');
@@ -409,6 +528,7 @@ const PICKER_CONFIG = {
     }
 
     refreshMatches();
+    updateTraversalButtons();
   }
 
   function refreshMatches() {
@@ -477,27 +597,41 @@ const PICKER_CONFIG = {
   document.addEventListener('focusin', onIframeFocus);
   attachViewportListeners();
   startIframeMonitoring();
+  updateTraversalButtons();
 
   // Panel Inputs
-  shadow.getElementById('up').onclick = () => {
-    if (state.element.parentElement && state.element.parentElement !== document.body) {
-      state.element = state.element.parentElement;
-      update();
-    }
-  };
-  shadow.getElementById('down').onclick = () => {
-    // Try to find the child that contains our original click
-    if (state.original && state.element.contains(state.original) && state.element !== state.original) {
-       let curr = state.original;
-       while (curr.parentElement !== state.element) curr = curr.parentElement;
-       state.element = curr;
-    } else if (state.element.firstElementChild) {
-       state.element = state.element.firstElementChild;
-    }
-    update();
-  };
+  if (upButton) {
+    upButton.onclick = () => {
+      const parent = getParentCandidate();
+      if (parent) {
+        state.element = parent;
+        update();
+      }
+    };
+  }
+  if (downButton) {
+    downButton.onclick = () => {
+      const child = getChildCandidate();
+      if (child) {
+        state.element = child;
+        update();
+      }
+    };
+  }
   
-  shadow.getElementById('strictness').oninput = update;
+  if (selectorInput) {
+    selectorInput.addEventListener('input', () => {
+      setSelectorValue(selectorInput.value.trim(), { fromManual: true });
+      refreshMatches();
+    });
+  }
+  
+  if (strictnessSlider) {
+    strictnessSlider.oninput = () => {
+      manualOverride = false;
+      update();
+    };
+  }
   
   textCheck = shadow.getElementById('use-text');
   textInput = shadow.getElementById('text-val');
