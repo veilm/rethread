@@ -1,10 +1,10 @@
-// Helper template used by cosmetic-filters.py. Keep the @match target and
-// CONFIG initializer anchors intact so the helper can rewrite them.
 // ==UserScript==
 // @name        Rethread Cosmetic Filter
 // @match       __RETHREAD_PICKER_MATCH__
 // @run-at      document-start
 // ==/UserScript==
+// Helper template used by cosmetic-filters.py. Keep the @match target and
+// CONFIG initializer anchors intact so the helper can rewrite them.
 
 (function() {
     /* 
@@ -29,10 +29,21 @@
     // Filters without 'hasText' are compiled to a raw stylesheet.
     const cssRules = CONFIG.filter(r => !r.hasText);
     if (cssRules.length) {
-        const style = document.createElement('style');
-        style.id = 'rethread-css';
-        style.textContent = cssRules.map(r => `${r.selector} { display: none !important; }`).join('\n');
-        (document.head || document.documentElement).appendChild(style);
+        const existing = document.getElementById('rethread-css');
+        if (!existing) {
+            const style = document.createElement('style');
+            style.id = 'rethread-css';
+            style.textContent = cssRules.map(r => `${r.selector} { display: none !important; }`).join('\n');
+            const install = () => {
+                const target = document.head || document.documentElement;
+                if (!target) {
+                    setTimeout(install, 0);
+                    return;
+                }
+                target.appendChild(style);
+            };
+            install();
+        }
     }
 
     // --- Engine 2: Dynamic Text Watcher (Smart) ---

@@ -260,8 +260,9 @@ class CosmeticFilterManager:
 
     script_id = self._script_id(host)
     self.log(f"Registering userscript {script_id} ({match_pattern})...")
-    if not self._run_rethread(["rethread", "scripts", "add", "--id", script_id],
-                              input_data=script_body):
+    result = self._run_rethread(["rethread", "scripts", "add", "--id", script_id],
+                                input_data=script_body)
+    if result is None:
       self.log(f"Failed to register userscript for {host}")
       return False
     return True
@@ -344,7 +345,11 @@ class CosmeticFilterManager:
         self.log(stderr)
       self.log(f"Command failed with exit code {result.returncode}")
       return None
-    return result.stdout
+    stdout = result.stdout
+    if stdout.strip().startswith("ERR"):
+      self.log(stdout.strip())
+      return None
+    return stdout
 
   def _timestamp(self) -> str:
     return str(int(time.time()))
