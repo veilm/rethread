@@ -7,7 +7,7 @@ E="export RETHREAD_USER_DATA_DIR=$RETHREAD_USER_DATA_DIR ;"
 config="${XDG_CONFIG_HOME:-$HOME/.config}/rethread"
 command_menu="$config/rethread-command-menu.py"
 right_click_handler="$config/right-click-handler.py"
-cosmetic_filter="$config/cosmetic-filters.py"
+cosmetic_filter="$config/cosmetic-filtering/cosmetic-filters.py"
 rethread bind --context-menu "$E $right_click_handler"
 
 if [ -x "$cosmetic_filter" ]; then
@@ -46,7 +46,7 @@ rethread bind --alt --shift --key p "$E rethread tabs open \"\$(wl-paste)\" ; $p
 rethread bind --alt --key y "$E wl-copy \$(rethread tabs list | jq -r '.tabs[] | select(.active == true) | .url') ; rethread tabstrip message --duration=500 'Copied URL'"
 rethread bind --alt --key ';' "$E \"$command_menu\""
 
-echo "archived.moe" | rethread rules js --blacklist
+cat $config/rules/js-blacklist*.txt | rethread rules js --blacklist
 
 # default google etc + any bonus user-defined
-cat $config/iframes-whitelist*.txt | rethread rules iframes --whitelist
+cat $config/rules/iframes-whitelist*.txt | rethread rules iframes --whitelist

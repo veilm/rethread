@@ -36,8 +36,10 @@ def _default_config_dir() -> Path:
 class CosmeticFilterManager:
   def __init__(self, quiet: bool = False):
     self.quiet = quiet
-    self.config_dir = _default_config_dir()
-    self.config_path = self.config_dir / CONFIG_FILENAME
+    self.config_root = _default_config_dir()
+    self.config_dir = self.config_root / "cosmetic-filtering"
+    self.config_path = (self.config_dir / CONFIG_FILENAME)
+    self.legacy_config_path = self.config_root / CONFIG_FILENAME
     self.template_path = Path(__file__).with_name("cosmetic-filtering-execute.js")
     self.picker_path = Path(__file__).with_name("cosmetic-filtering-picker.js")
     self.data = self._load_config()
@@ -47,6 +49,11 @@ class CosmeticFilterManager:
       print(message, file=sys.stderr)
 
   def _load_config(self) -> Dict[str, Any]:
+    if not self.config_path.exists() and self.legacy_config_path.exists():
+      # Migrate legacy configs stored directly in $config/rethread.
+      self.log(f"Migrating legacy config to {self.config_path}")
+      self.config_dir.mkdir(parents=True, exist_ok=True)
+      self.legacy_config_path.replace(self.config_path)
     if not self.config_path.exists():
       return {"version": CONFIG_VERSION, "filters": {}}
     try:
