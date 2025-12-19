@@ -6,4 +6,5 @@ config_dir="$config_root/rethread"
 mkdir -p "$config_dir"
 
 rm -rf util/__pycache__
-cp util/* "$config_dir"
+# Copy the contents of util/ recursively (including directories like rules/).
+cp -a util/. "$config_dir/"
