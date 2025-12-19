@@ -51,8 +51,66 @@ QString EvalHelperSource() {
   if (window.__rethreadEvalBridgeInstalled) {
     return;
   }
-  window.__rethreadEvalBridgeInstalled = true;
+
+  var retryAttempts = 0;
+  function markInstalled() {
+    window.__rethreadEvalBridgeInstalled = true;
+  }
+
+  function ensureBridgeReady(channel, force) {
+    if (!force && window.__rethreadEvalBridgeInstalled) {
+      return;
+    }
+    retryAttempts += 1;
+    if (!channel || !channel.objects) {
+      console.warn('[rethread] eval helper attempt ' + retryAttempts +
+                   ': channel objects unavailable; retrying…');
+      window.setTimeout(function() { ensureBridgeReady(channel); }, 50);
+      return;
+    }
+    var bridge = channel.objects.rethreadEvalBridge;
+    if (!bridge) {
+      console.warn('[rethread] eval helper attempt ' + retryAttempts +
+                   ': missing bridge object; retrying…');
+      window.setTimeout(function() { ensureBridgeReady(channel); }, 50);
+      return;
+    }
+
+    var resolveMethod = bridge.resolve || bridge.Resolve;
+    var rejectMethod = bridge.reject || bridge.Reject;
+    var readyMethod = bridge.notifyReady || bridge.NotifyReady;
+    if (!resolveMethod || !rejectMethod || !readyMethod) {
+      console.warn('[rethread] eval helper attempt ' + retryAttempts +
+                   ': missing slots/signals (resolve=' + typeof resolveMethod +
+                   ', reject=' + typeof rejectMethod +
+                   ', notifyReady=' + typeof readyMethod + '); retrying…');
+      window.setTimeout(function() { ensureBridgeReady(channel); }, 100);
+      return;
+    }
+
+    window.__rethreadPromiseBridge = {
+      resolve: function(requestId, value) {
+        resolveMethod.call(bridge, requestId, value);
+      },
+      reject: function(requestId, value) {
+        var message = value;
+        if (message && typeof message === 'object' && message.message) {
+          message = message.message;
+        }
+        rejectMethod.call(bridge, requestId, String(message !== undefined ? message : 'Unknown error'));
+      }
+    };
+
+    markInstalled();
+    console.log('[rethread] eval helper installed after ' +
+                retryAttempts + ' attempts');
+    readyMethod.call(bridge);
+  }
+
   function install(channel) {
+    if (!channel) {
+      return;
+    }
     if (!channel.__rethreadPatched) {
       channel.__rethreadPatched = true;
       var storedCallbacks = channel.execCallbacks || {};
@@ -72,36 +130,16 @@ QString EvalHelperSource() {
         }
       });
     }
-
-    var bridge = channel.objects.rethreadEvalBridge;
-    if (!bridge) {
-      console.warn('[rethread] eval helper missing bridge object; objects=', Object.keys(channel.objects || {}));
-      return;
-    }
-
-    var resolveMethod = bridge.resolve || bridge.Resolve;
-    var rejectMethod = bridge.reject || bridge.Reject;
-    var readyMethod = bridge.notifyReady || bridge.NotifyReady;
-    if (!resolveMethod || !rejectMethod || !readyMethod) {
-      console.warn('[rethread] eval helper missing slots/signals');
-      return;
-    }
-
-    window.__rethreadPromiseBridge = {
-      resolve: function(requestId, value) {
-        resolveMethod.call(bridge, requestId, value);
-      },
-      reject: function(requestId, value) {
-        var message = value;
-        if (message && typeof message === 'object' && message.message) {
-          message = message.message;
-        }
-        rejectMethod.call(bridge, requestId, String(message !== undefined ? message : 'Unknown error'));
-      }
-    };
-
-    readyMethod.call(bridge);
+    window.__rethreadEvalChannel = channel;
+    ensureBridgeReady(channel, false);
   }
+
+  window.__rethreadRequestEvalBridgeReady = function() {
+    console.log('[rethread] eval helper reinstall requested');
+    window.__rethreadEvalBridgeInstalled = false;
+    retryAttempts = 0;
+    ensureBridgeReady(window.__rethreadEvalChannel || null, true);
+  };
 
   function initChannel() {
     if (!window.qt || !window.qt.webChannelTransport) {
@@ -348,6 +386,7 @@ void TabManager::EnsureEvalBridge(TabEntry* tab) {
 
   auto bridge = std::make_unique<JsEvalBridge>();
   const int tab_id = tab->id;
+  QPointer<QWebEnginePage> page_guard(page);
   QObject::connect(bridge.get(), &JsEvalBridge::Ready, tab->view,
                    [this, tab_id]() {
                      if (TabEntry* entry = findById(tab_id)) {
@@ -355,9 +394,16 @@ void TabManager::EnsureEvalBridge(TabEntry* tab) {
                      }
                    });
   QObject::connect(page, &QWebEnginePage::loadStarted, tab->view,
-                   [this, tab_id]() {
+                   [this, tab_id, page_guard]() {
                      if (TabEntry* entry = findById(tab_id)) {
                        entry->eval_bridge_ready = false;
+                     }
+                     if (page_guard) {
+                       page_guard->runJavaScript(
+                           QStringLiteral(
+                               "if (window.__rethreadRequestEvalBridgeReady) "
+                               "{ window.__rethreadRequestEvalBridgeReady(); }"),
+                           QWebEngineScript::MainWorld);
                      }
                    });
 
