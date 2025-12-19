@@ -5,13 +5,20 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
+#include <QWebEngineDownloadRequest>
+#include <QWebEnginePage>
 #include <QWebEngineProfile>
 #include <QWebEngineSettings>
 
+#include "app/user_dirs.h"
 #include "browser/command_dispatcher.h"
 #include "browser/context_menu_binding_manager.h"
 #include "browser/rules_manager.h"
@@ -107,6 +114,186 @@ void BrowserApplication::InitializeProfile() {
   rules_interceptor_ =
       std::make_unique<RulesRequestInterceptor>(rules_manager_.get());
   profile_->setUrlRequestInterceptor(rules_interceptor_.get());
+  InitializeDownloadHandling();
+}
+
+void BrowserApplication::InitializeDownloadHandling() {
+  if (!profile_) {
+    return;
+  }
+  connect(profile_, &QWebEngineProfile::downloadRequested, this,
+          &BrowserApplication::HandleDownloadRequested);
+}
+
+void BrowserApplication::HandleDownloadRequested(
+    QWebEngineDownloadRequest* request) {
+  if (!request ||
+      request->state() != QWebEngineDownloadRequest::DownloadRequested) {
+    return;
+  }
+  if (RunDownloadHandlerScript(request)) {
+    return;
+  }
+  ApplyDefaultDownloadBehavior(request);
+}
+
+bool BrowserApplication::RunDownloadHandlerScript(
+    QWebEngineDownloadRequest* request) {
+  const QString handler_path = DownloadHandlerPath();
+  QFileInfo handler_info(handler_path);
+  if (!handler_info.exists() || !handler_info.isFile()) {
+    return false;
+  }
+
+  QJsonObject payload;
+  payload.insert(QStringLiteral("url"), request->url().toString());
+  payload.insert(QStringLiteral("mime_type"), request->mimeType());
+  payload.insert(QStringLiteral("suggested_file_name"),
+                 request->suggestedFileName());
+  payload.insert(QStringLiteral("download_directory"),
+                 request->downloadDirectory());
+  payload.insert(QStringLiteral("download_file_name"),
+                 request->downloadFileName());
+  payload.insert(QStringLiteral("state"),
+                 static_cast<int>(request->state()));
+  payload.insert(QStringLiteral("interrupt_reason"),
+                 static_cast<int>(request->interruptReason()));
+  payload.insert(QStringLiteral("save_page_format"),
+                 static_cast<int>(request->savePageFormat()));
+  payload.insert(QStringLiteral("total_bytes"),
+                 static_cast<qint64>(request->totalBytes()));
+  payload.insert(QStringLiteral("received_bytes"),
+                 static_cast<qint64>(request->receivedBytes()));
+  if (request->page()) {
+    payload.insert(QStringLiteral("page_url"),
+                   request->page()->url().toString());
+  }
+
+  QProcess process;
+  process.setProgram(handler_path);
+  process.setProcessChannelMode(QProcess::SeparateChannels);
+
+  QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+  if (!options_.user_data_dir.isEmpty()) {
+    env.insert(QStringLiteral("RETHREAD_USER_DATA_DIR"),
+               options_.user_data_dir);
+  }
+  if (!options_.tab_socket_path.isEmpty()) {
+    env.insert(QStringLiteral("RETHREAD_TAB_SOCKET"),
+               options_.tab_socket_path);
+  }
+  process.setProcessEnvironment(env);
+
+  QByteArray stdin_payload =
+      QJsonDocument(payload).toJson(QJsonDocument::Compact);
+  stdin_payload.append('\n');
+  process.start();
+  if (!process.waitForStarted(1000)) {
+    AppendDebugLog("Failed to start download handler: " +
+                   handler_path.toStdString());
+    return false;
+  }
+  process.write(stdin_payload);
+  process.closeWriteChannel();
+  if (!process.waitForFinished(10000)) {
+    AppendDebugLog("Download handler timed out");
+    process.kill();
+    process.waitForFinished();
+    return false;
+  }
+
+  const QByteArray stdout_data = process.readAllStandardOutput().trimmed();
+  if (stdout_data.isEmpty()) {
+    AppendDebugLog("Download handler produced no output");
+    return false;
+  }
+
+  QJsonParseError parse_error;
+  const QJsonDocument response =
+      QJsonDocument::fromJson(stdout_data, &parse_error);
+  if (parse_error.error != QJsonParseError::NoError) {
+    AppendDebugLog("Download handler response parse error: " +
+                   parse_error.errorString().toStdString());
+    return false;
+  }
+  if (!response.isObject()) {
+    AppendDebugLog("Download handler response must be an object");
+    return false;
+  }
+
+  const QJsonObject decision = response.object();
+  const bool accept =
+      decision.value(QStringLiteral("accept")).toBool(true);
+  if (!accept) {
+    request->cancel();
+    return true;
+  }
+
+  const QString path_value =
+      decision.value(QStringLiteral("path")).toString();
+  if (!path_value.isEmpty()) {
+    QFileInfo info(path_value);
+    if (!info.absolutePath().isEmpty()) {
+      request->setDownloadDirectory(info.absolutePath());
+    }
+    if (!info.fileName().isEmpty()) {
+      request->setDownloadFileName(info.fileName());
+    }
+  } else {
+    const QString directory =
+        decision.value(QStringLiteral("directory")).toString();
+    const QString filename =
+        decision.value(QStringLiteral("filename")).toString();
+    if (!directory.isEmpty()) {
+      request->setDownloadDirectory(directory);
+    }
+    if (!filename.isEmpty()) {
+      request->setDownloadFileName(filename);
+    }
+  }
+
+  if (request->downloadFileName().isEmpty()) {
+    QString fallback = request->suggestedFileName();
+    if (fallback.isEmpty()) {
+      fallback = QStringLiteral("download");
+    }
+    request->setDownloadFileName(fallback);
+  }
+
+  ApplyDefaultDownloadBehavior(request);
+  return true;
+}
+
+void BrowserApplication::ApplyDefaultDownloadBehavior(
+    QWebEngineDownloadRequest* request) {
+  if (!request) {
+    return;
+  }
+  QString directory = request->downloadDirectory();
+  if (directory.isEmpty()) {
+    directory =
+        QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+    if (directory.isEmpty()) {
+      directory = options_.user_data_dir;
+    }
+    if (!directory.isEmpty()) {
+      request->setDownloadDirectory(directory);
+    }
+  }
+  QString file_name = request->downloadFileName();
+  if (file_name.isEmpty()) {
+    file_name = request->suggestedFileName();
+    if (file_name.isEmpty()) {
+      file_name = QStringLiteral("download");
+    }
+    request->setDownloadFileName(file_name);
+  }
+  request->accept();
+}
+
+QString BrowserApplication::DownloadHandlerPath() const {
+  return QString::fromStdString(DefaultConfigDir()) +
+         QStringLiteral("/rethread-download-handler.py");
 }
 
 void BrowserApplication::InitializeUi() {

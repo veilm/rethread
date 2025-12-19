@@ -10,6 +10,7 @@
 #include <QString>
 
 class QWebEngineProfile;
+class QWebEngineDownloadRequest;
 
 namespace rethread {
 
@@ -59,6 +60,11 @@ class BrowserApplication : public QObject {
   void LoadInitialTab();
   void RunStartupScript() const;
   void ScheduleAutoExit();
+  void InitializeDownloadHandling();
+  void HandleDownloadRequested(QWebEngineDownloadRequest* request);
+  bool RunDownloadHandlerScript(QWebEngineDownloadRequest* request);
+  void ApplyDefaultDownloadBehavior(QWebEngineDownloadRequest* request);
+  QString DownloadHandlerPath() const;
 
   BrowserOptions options_;
   QWebEngineProfile* profile_ = nullptr;
