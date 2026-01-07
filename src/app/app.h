@@ -40,6 +40,8 @@ struct BrowserOptions {
   QColor background_color = QColor(0x33, 0x33, 0x33);
   int auto_exit_seconds = 0;
   ColorScheme color_scheme = ColorScheme::kDark;
+  bool cdp_enabled = true;
+  int cdp_port = 9222;
 };
 
 class BrowserApplication : public QObject {
@@ -65,6 +67,7 @@ class BrowserApplication : public QObject {
   bool RunDownloadHandlerScript(QWebEngineDownloadRequest* request);
   void ApplyDefaultDownloadBehavior(QWebEngineDownloadRequest* request);
   QString DownloadHandlerPath() const;
+  void UpdateCdpPortInfo();
 
   BrowserOptions options_;
   QWebEngineProfile* profile_ = nullptr;

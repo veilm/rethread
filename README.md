@@ -170,6 +170,24 @@ rethread devtools open
 It spawns a standard Qt WebEngine DevTools window (one per tab) so you can keep
 working from the CLI and still reach the familiar debugging tools.
 
+## network log
+
+Capture network traffic (including response bodies) for a tab:
+
+```
+rethread network-log --id=3
+```
+
+Use the tab id from `rethread tabs list`. By default it writes captures into
+`./rethread-tab-<id>-network-log/`, mirroring
+`metadata.json`, headers, and response bodies for each request. You can filter
+requests with `--url`, `--method`, `--status`, or `--mime`, or choose a
+different destination with `--dir`.
+
+Rethread enables the CDP debug port by default on `127.0.0.1:9222`. Use
+`rethread browser --cdp-port=PORT` to change it or `rethread browser --cdp-disable`
+to turn it off.
+
 ## tab strip overlay
 
 The tab strip overlay starts hidden. Use the CLI to control it at runtime:

@@ -685,6 +685,14 @@ bool TabManager::OpenDevToolsForActiveTab() {
   return true;
 }
 
+QString TabManager::DevToolsIdForTab(int tab_id) const {
+  const TabEntry* entry = findById(tab_id);
+  if (!entry || !entry->view || !entry->view->page()) {
+    return QString();
+  }
+  return entry->view->page()->devToolsId();
+}
+
 void TabManager::CloseDevTools(QWebEnginePage* page, bool close_view) {
   if (!page) {
     return;

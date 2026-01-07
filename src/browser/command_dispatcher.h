@@ -38,6 +38,7 @@ class CommandDispatcher {
   QString HandleEval(const QString& args) const;
   QString HandleRules(const QString& args) const;
   QString HandleDevTools(const QString& args) const;
+  QString HandleDevToolsId(const QString& args) const;
   QString HandleScripts(const QString& args) const;
 
   TabManager* tab_manager_;

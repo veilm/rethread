@@ -53,4 +53,11 @@ std::string DefaultStartupScriptPath() {
   return DefaultConfigDir() + "/startup.sh";
 }
 
+std::string CdpPortPath(const std::string& user_data_dir) {
+  if (user_data_dir.empty()) {
+    return "cdp-port.txt";
+  }
+  return user_data_dir + "/cdp-port.txt";
+}
+
 }  // namespace rethread

@@ -71,6 +71,7 @@ bool BrowserApplication::Initialize() {
   if (!profile_) {
     return false;
   }
+  UpdateCdpPortInfo();
 
   script_manager_ =
       std::make_unique<ScriptManager>(profile_, options_.user_data_dir);
@@ -402,6 +403,29 @@ void BrowserApplication::ScheduleAutoExit() {
   QTimer::singleShot(options_.auto_exit_seconds * 1000, this, []() {
     QCoreApplication::quit();
   });
+}
+
+void BrowserApplication::UpdateCdpPortInfo() {
+  const std::string path =
+      CdpPortPath(options_.user_data_dir.toStdString());
+  if (path.empty()) {
+    return;
+  }
+  const QString qpath = QString::fromStdString(path);
+  if (!options_.cdp_enabled || options_.cdp_port <= 0 ||
+      options_.cdp_port >= 65536) {
+    QFile::remove(qpath);
+    return;
+  }
+  QFile file(qpath);
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    AppendDebugLog("Failed to write CDP port file: " +
+                   qpath.toStdString());
+    return;
+  }
+  const QByteArray data =
+      QByteArray::number(options_.cdp_port) + QByteArrayLiteral("\n");
+  file.write(data);
 }
 
 }  // namespace rethread
