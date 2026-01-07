@@ -7,4 +7,5 @@ mkdir -p "$config_dir"
 
 rm -rf util/__pycache__
 # Copy the contents of util/ recursively (including directories like rules/).
-cp -a util/. "$config_dir/"
+# Don't overwrite existing user files in the config directory.
+cp -a -n util/. "$config_dir/"
