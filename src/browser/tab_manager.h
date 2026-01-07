@@ -58,6 +58,7 @@ class TabManager : public QObject {
   bool historyBack();
   bool historyForward();
   bool OpenDevToolsForActiveTab();
+  QString DevToolsIdForTab(int tab_id) const;
   bool EvaluateJavaScript(const QString& script,
                           int tab_id,
                           int tab_index,

@@ -9,6 +9,7 @@ std::string DefaultUserDataDir();
 std::string DefaultConfigDir();
 std::string DefaultStartupScriptPath();
 std::string DefaultUserDataRoot();
+std::string CdpPortPath(const std::string& user_data_dir);
 
 inline constexpr char kDefaultProfileName[] = "default";
 

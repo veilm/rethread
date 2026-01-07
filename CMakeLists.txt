@@ -42,4 +42,5 @@ add_executable(cli
     src/app/tab_cli.cc
     src/app/user_dirs.cc)
 target_include_directories(cli PRIVATE src)
+target_link_libraries(cli PRIVATE Qt6::Core)
 set_target_properties(cli PROPERTIES OUTPUT_NAME rethread)

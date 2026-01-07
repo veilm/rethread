@@ -255,6 +255,11 @@ QString CommandDispatcher::Execute(const QString& command) const {
     std::getline(stream, rest);
     return HandleDevTools(QString::fromStdString(rest));
   }
+  if (op == "devtools-id") {
+    std::string rest;
+    std::getline(stream, rest);
+    return HandleDevToolsId(QString::fromStdString(rest));
+  }
   if (op == "tabstrip") {
     std::string rest;
     std::getline(stream, rest);
@@ -690,6 +695,30 @@ QString CommandDispatcher::HandleDevTools(const QString& args) const {
     return QStringLiteral("ERR failed to open devtools\n");
   }
   return QString();
+}
+
+QString CommandDispatcher::HandleDevToolsId(const QString& args) const {
+  if (!tab_manager_) {
+    return QStringLiteral("ERR devtools unavailable\n");
+  }
+  const QString trimmed = args.trimmed();
+  if (trimmed.isEmpty()) {
+    return QStringLiteral("ERR missing tab id\n");
+  }
+  QStringList pieces = trimmed.split(QChar(' '), Qt::SkipEmptyParts);
+  if (pieces.size() != 1) {
+    return QStringLiteral("ERR devtools-id expects one tab id\n");
+  }
+  bool ok = false;
+  int tab_id = pieces.first().toInt(&ok);
+  if (!ok || tab_id <= 0) {
+    return QStringLiteral("ERR invalid tab id\n");
+  }
+  const QString devtools_id = tab_manager_->DevToolsIdForTab(tab_id);
+  if (devtools_id.isEmpty()) {
+    return QStringLiteral("ERR devtools id unavailable\n");
+  }
+  return devtools_id + QLatin1Char('\n');
 }
 
 QString CommandDispatcher::HandleTabStrip(const QString& args) const {

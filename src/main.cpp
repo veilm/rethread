@@ -32,6 +32,8 @@ struct CliOptions {
   int auto_exit_seconds = 0;
   uint32_t background_color = rethread::kDefaultBackgroundColor;
   bool user_data_dir_overridden = false;
+  bool cdp_enabled = true;
+  int cdp_port = 9222;
 };
 
 bool ParseColorValue(const std::string& input, uint32_t* color) {
@@ -145,6 +147,22 @@ CliOptions ParseCliOptions(int argc, char* argv[]) {
       continue;
     }
 
+    const std::string cdp_port_prefix = "--cdp-port=";
+    if (arg.rfind(cdp_port_prefix, 0) == 0) {
+      options.cdp_port = std::atoi(arg.substr(cdp_port_prefix.size()).c_str());
+      options.cdp_enabled = true;
+      continue;
+    }
+    if (arg == "--cdp-port" && i + 1 < argc) {
+      options.cdp_port = std::atoi(argv[++i]);
+      options.cdp_enabled = true;
+      continue;
+    }
+    if (arg == "--cdp-disable" || arg == "--no-cdp") {
+      options.cdp_enabled = false;
+      continue;
+    }
+
     const std::string url_prefix = "--url=";
     if (arg.rfind(url_prefix, 0) == 0) {
       options.initial_url = arg.substr(url_prefix.size());
@@ -222,7 +240,9 @@ void PrintHelp() {
       << "  --auto-exit=SECONDS     Quit automatically after SECONDS.\n"
       << "  --startup-script=PATH   Run PATH after launch (defaults to\n"
       << "                          $XDG_CONFIG_HOME/rethread/startup.sh).\n"
-      << "  --color-scheme=SCHEME   Force auto, light, or dark (default: dark).\n";
+      << "  --color-scheme=SCHEME   Force auto, light, or dark (default: dark).\n"
+      << "  --cdp-port=PORT         Enable CDP on PORT (default: 9222).\n"
+      << "  --cdp-disable           Disable the CDP debug port.\n";
   std::cout << "\nEnvironment:\n"
             << "  RETHREAD_USER_DATA_DIR  Default profile directory when no flags\n"
             << "                          override it.\n";
@@ -361,6 +381,28 @@ void ApplyChromiumColorPreference(rethread::ColorScheme scheme) {
   qputenv("QTWEBENGINE_CHROMIUM_FLAGS", final_flags.toUtf8());
 }
 
+void ApplyRemoteDebugging(bool enabled, int port) {
+  const QByteArray env = qgetenv("QTWEBENGINE_CHROMIUM_FLAGS");
+  QStringList flags = SplitChromiumFlags(QString::fromUtf8(env));
+  QStringList filtered;
+  filtered.reserve(flags.size() + 2);
+  for (const QString& flag : flags) {
+    if (flag.startsWith(QStringLiteral("--remote-debugging-port=")) ||
+        flag.startsWith(QStringLiteral("--remote-debugging-address="))) {
+      continue;
+    }
+    filtered << flag;
+  }
+  if (enabled && port > 0 && port < 65536) {
+    filtered << QStringLiteral("--remote-debugging-port=%1").arg(port);
+    filtered << QStringLiteral("--remote-debugging-address=127.0.0.1");
+  } else if (enabled) {
+    std::cerr << "Ignoring invalid --cdp-port value: " << port << "\n";
+  }
+  const QString final_flags = ComposeChromiumFlags(filtered);
+  qputenv("QTWEBENGINE_CHROMIUM_FLAGS", final_flags.toUtf8());
+}
+
 void ApplyQtPalette(QApplication& app, rethread::ColorScheme scheme) {
   if (auto* hints = QGuiApplication::styleHints()) {
     switch (scheme) {
@@ -404,6 +446,7 @@ int main(int argc, char* argv[]) {
 
   rethread::ColorScheme scheme = ParseColorSchemeFlag(cli.color_scheme);
   ApplyChromiumColorPreference(scheme);
+  ApplyRemoteDebugging(cli.cdp_enabled, cli.cdp_port);
   EnsureChromiumFeatureEnabled(QStringLiteral("OverlayScrollbar"));
   QApplication app(argc, argv);
   ApplyQtPalette(app, scheme);
@@ -418,6 +461,8 @@ int main(int argc, char* argv[]) {
   options.auto_exit_seconds = cli.auto_exit_seconds;
   options.background_color = ColorFromRgba(cli.background_color);
   options.color_scheme = scheme;
+  options.cdp_enabled = cli.cdp_enabled;
+  options.cdp_port = cli.cdp_port;
 
   rethread::BrowserApplication browser(options);
   if (!browser.Initialize()) {

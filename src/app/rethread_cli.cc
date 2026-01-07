@@ -35,6 +35,8 @@ void PrintCliUsage() {
             << "    Manage profile userscripts.\n"
             << "  rethread devtools [--user-data-dir=PATH] [--profile=NAME] open\n"
             << "    Open DevTools for the active tab.\n"
+            << "  rethread network-log [--user-data-dir=PATH] [--profile=NAME] ...\n"
+            << "    Capture network traffic for a tab via CDP.\n"
             << "  rethread browser [options]\n"
             << "    Launch the browser UI (same flags as rethread-browser).\n";
 }
@@ -113,6 +115,10 @@ int main(int argc, char* argv[]) {
   if (command == "devtools") {
     return rethread::RunDevToolsCli(argc - 2, argv + 2,
                                     rethread::DefaultUserDataRoot());
+  }
+  if (command == "network-log") {
+    return rethread::RunNetworkLogCli(argc - 2, argv + 2,
+                                      rethread::DefaultUserDataRoot());
   }
   if (command == "scripts") {
     return rethread::RunScriptsCli(argc - 2, argv + 2,
