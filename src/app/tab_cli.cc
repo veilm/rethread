@@ -1140,7 +1140,7 @@ void NetworkLogDebug(const std::string& message) {
   if (!NetworkLogDebugEnabled()) {
     return;
   }
-  std::cerr << "[network-log] " << message << "\\n";
+  std::cerr << "[network-log] " << message << '\n';
 }
 
 volatile sig_atomic_t g_stop_requested = 0;
@@ -1280,8 +1280,21 @@ bool WriteResponseBodyJson(const std::string& path,
   return out.good();
 }
 
+std::string ShortRequestIdFragment(const std::string& request_id,
+                                   size_t limit) {
+  std::string fragment = SanitizePathFragment(request_id);
+  if (fragment.empty()) {
+    return "req";
+  }
+  if (limit == 0 || fragment.size() <= limit) {
+    return fragment;
+  }
+  return fragment.substr(fragment.size() - limit);
+}
+
 std::string FormatCaptureDirName(
     const std::chrono::system_clock::time_point& timestamp,
+    const std::string& request_id,
     const std::string& method,
     const std::string& url) {
   const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -1295,8 +1308,9 @@ std::string FormatCaptureDirName(
                    [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
   }
   const std::string url_fragment = ShortenUrlFragment(url, 96);
+  const std::string request_fragment = ShortRequestIdFragment(request_id, 8);
   std::ostringstream out;
-  out << ms << "-" << verb << "-" << url_fragment;
+  out << ms << "-" << verb << "-" << url_fragment << "-" << request_fragment;
   return out.str();
 }
 
@@ -1314,7 +1328,7 @@ bool WriteNetworkCapture(const std::string& base_dir,
                          const std::string& response_body,
                          const std::string& response_body_error) {
   const std::string dir_name =
-      FormatCaptureDirName(timestamp, method, url);
+      FormatCaptureDirName(timestamp, request_id, method, url);
   const std::filesystem::path capture_dir =
       std::filesystem::path(base_dir) / dir_name;
   std::error_code ec;
@@ -2522,8 +2536,11 @@ int RunNetworkLogCli(int argc,
 
   int next_id = 1;
   QJsonObject empty_params;
+  QJsonObject network_params;
+  network_params.insert(QStringLiteral("maxResourceBufferSize"), 64 * 1024 * 1024);
+  network_params.insert(QStringLiteral("maxTotalBufferSize"), 128 * 1024 * 1024);
   if (!SendCdpRequest(fd, &next_id, QStringLiteral("Network.enable"),
-                      empty_params, nullptr)) {
+                      network_params, nullptr)) {
     std::cerr << "Failed to enable Network domain\n";
     close(fd);
     return 1;
@@ -2544,10 +2561,76 @@ int RunNetworkLogCli(int argc,
     std::map<std::string, std::string> response_headers;
     std::string request_body;
     bool has_response = false;
+    bool captured = false;
   };
 
   std::map<std::string, CaptureEntry> pending;
   std::deque<QJsonObject> pending_events;
+  auto try_capture_entry = [&](CaptureEntry* entry) -> bool {
+    if (!entry || entry->captured) {
+      return true;
+    }
+    if (!filters.Match(entry->url, entry->method, entry->status,
+                       entry->content_type)) {
+      NetworkLogDebug("skip " + entry->request_id + " " + entry->url +
+                      " " + entry->method + " " + entry->status +
+                      " " + entry->content_type);
+      entry->captured = true;
+      return true;
+    }
+
+    std::string response_body;
+    std::string response_body_error;
+    QJsonObject body_params;
+    body_params.insert(QStringLiteral("requestId"),
+                       QString::fromStdString(entry->request_id));
+    int body_request_id = 0;
+    if (SendCdpRequest(fd, &next_id, QStringLiteral("Network.getResponseBody"),
+                       body_params, &body_request_id)) {
+      QJsonObject body_response;
+      if (WaitForCdpResponse(fd, body_request_id, &body_response,
+                             &pending_events, &ws_prefetch)) {
+        if (body_response.contains(QStringLiteral("error"))) {
+          const QJsonObject err_obj =
+              body_response.value(QStringLiteral("error")).toObject();
+          response_body_error =
+              err_obj.value(QStringLiteral("message")).toString().toStdString();
+        } else {
+          const QJsonObject result =
+              body_response.value(QStringLiteral("result")).toObject();
+          const std::string body_text =
+              result.value(QStringLiteral("body")).toString().toStdString();
+          const bool base64_encoded =
+              result.value(QStringLiteral("base64Encoded")).toBool();
+          if (!body_text.empty()) {
+            if (base64_encoded) {
+              std::string decoded;
+              if (Base64Decode(body_text, &decoded)) {
+                response_body = std::move(decoded);
+              } else {
+                response_body_error = "decode body: invalid base64";
+              }
+            } else {
+              response_body = body_text;
+            }
+          }
+        }
+      }
+    }
+
+    if (!WriteNetworkCapture(output_dir, entry->timestamp, entry->request_id,
+                             entry->url, entry->method, "Response",
+                             entry->status.empty() ? "<pending>" : entry->status,
+                             entry->content_type, entry->request_headers,
+                             entry->response_headers, entry->request_body,
+                             response_body, response_body_error)) {
+      std::cerr << "Failed to write capture for " << entry->url << "\n";
+    } else {
+      NetworkLogDebug("capture " + entry->request_id + " " + entry->url);
+    }
+    entry->captured = true;
+    return true;
+  };
   while (!g_stop_requested) {
     QJsonObject event;
     if (!pending_events.empty()) {
@@ -2585,7 +2668,7 @@ int RunNetworkLogCli(int argc,
           request.value(QStringLiteral("postData")).toString().toStdString();
       entry.timestamp = std::chrono::system_clock::now();
       pending[entry.request_id] = std::move(entry);
-      NetworkLogDebug("request " + request_id.toStdString());
+      NetworkLogDebug("request " + request_id.toStdString() + " " + entry.url);
       continue;
     }
     if (method == QStringLiteral("Network.responseReceived")) {
@@ -2608,7 +2691,22 @@ int RunNetworkLogCli(int argc,
       }
       entry.timestamp = std::chrono::system_clock::now();
       entry.has_response = true;
-      NetworkLogDebug("response " + request_id.toStdString());
+      NetworkLogDebug("response " + request_id.toStdString() + " " +
+                      std::to_string(response.value(QStringLiteral("status")).toInt()) +
+                      " " + entry.url);
+      if (!entry.status.empty()) {
+        int status_code = 0;
+        try {
+          status_code = std::stoi(entry.status);
+        } catch (...) {
+          status_code = 0;
+        }
+        if (status_code >= 400) {
+          if (try_capture_entry(&entry)) {
+            pending.erase(request_id.toStdString());
+          }
+        }
+      }
       continue;
     }
     if (method == QStringLiteral("Network.loadingFailed")) {
@@ -2632,56 +2730,9 @@ int RunNetworkLogCli(int argc,
     CaptureEntry entry = std::move(it->second);
     pending.erase(it);
 
-    std::string response_body;
-    std::string response_body_error;
-    QJsonObject body_params;
-    body_params.insert(QStringLiteral("requestId"), request_id);
-    int body_request_id = 0;
-    if (SendCdpRequest(fd, &next_id, QStringLiteral("Network.getResponseBody"),
-                       body_params, &body_request_id)) {
-      QJsonObject body_response;
-      if (WaitForCdpResponse(fd, body_request_id, &body_response,
-                             &pending_events, &ws_prefetch)) {
-        if (body_response.contains(QStringLiteral("error"))) {
-          const QJsonObject err_obj =
-              body_response.value(QStringLiteral("error")).toObject();
-          response_body_error =
-              err_obj.value(QStringLiteral("message")).toString().toStdString();
-        } else {
-          const QJsonObject result =
-              body_response.value(QStringLiteral("result")).toObject();
-          const std::string body_text =
-              result.value(QStringLiteral("body")).toString().toStdString();
-          const bool base64_encoded =
-              result.value(QStringLiteral("base64Encoded")).toBool();
-          if (!body_text.empty()) {
-            if (base64_encoded) {
-              std::string decoded;
-              if (Base64Decode(body_text, &decoded)) {
-                response_body = std::move(decoded);
-              } else {
-                response_body_error = "decode body: invalid base64";
-              }
-            } else {
-              response_body = body_text;
-            }
-          }
-        }
-      }
-    }
-
-    if (!filters.Match(entry.url, entry.method, entry.status,
-                       entry.content_type)) {
+    if (!try_capture_entry(&entry)) {
+      pending[request_id.toStdString()] = entry;
       continue;
-    }
-
-    if (!WriteNetworkCapture(output_dir, entry.timestamp, entry.request_id,
-                             entry.url, entry.method, "Response",
-                             entry.status.empty() ? "<pending>" : entry.status,
-                             entry.content_type, entry.request_headers,
-                             entry.response_headers, entry.request_body,
-                             response_body, response_body_error)) {
-      std::cerr << "Failed to write capture for " << entry.url << "\n";
     }
   }
   close(fd);
