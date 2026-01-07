@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Sample right-click handler for rethread.
 
-Copies the media/source URL under the cursor into the Wayland clipboard.
+Copies the link/media/source URL under the cursor into the Wayland clipboard.
 """
 
 from __future__ import annotations
@@ -14,7 +14,8 @@ from urllib.parse import unquote
 
 def main() -> int:
   source = (
-      os.environ.get("RETHREAD_CONTEXT_SOURCE_URL")
+      os.environ.get("RETHREAD_CONTEXT_LINK_URL")
+      or os.environ.get("RETHREAD_CONTEXT_SOURCE_URL")
       or os.environ.get("RETHREAD_MENU_SOURCE_URL"))
   if not source:
     return 0
