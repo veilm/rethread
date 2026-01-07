@@ -362,6 +362,8 @@ std::string HexEncode(const std::string& input) {
   return output;
 }
 
+extern volatile sig_atomic_t g_stop_requested;
+
 bool ReadHttpHeaders(int fd, std::string* header_out,
                      std::string* remainder_out);
 std::string TrimWhitespace(const std::string& input);
@@ -464,6 +466,12 @@ bool ReadExact(int fd, void* buffer, size_t length) {
   size_t remaining = length;
   while (remaining > 0) {
     ssize_t n = recv(fd, out, remaining, 0);
+    if (n < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)) {
+      if (g_stop_requested) {
+        return false;
+      }
+      continue;
+    }
     if (n <= 0) {
       return false;
     }
@@ -486,6 +494,12 @@ bool ReadExactWithBuffer(int fd, void* buffer, size_t length,
   }
   while (remaining > 0) {
     ssize_t n = recv(fd, out, remaining, 0);
+    if (n < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)) {
+      if (g_stop_requested) {
+        return false;
+      }
+      continue;
+    }
     if (n <= 0) {
       return false;
     }
@@ -507,6 +521,16 @@ bool SendAll(int fd, const void* data, size_t length) {
     remaining -= static_cast<size_t>(n);
   }
   return true;
+}
+
+bool SetSocketTimeout(int fd, int timeout_ms) {
+  if (timeout_ms <= 0) {
+    return false;
+  }
+  struct timeval tv;
+  tv.tv_sec = timeout_ms / 1000;
+  tv.tv_usec = (timeout_ms % 1000) * 1000;
+  return setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == 0;
 }
 
 bool ReadHttpResponse(int fd, std::string* header_out, std::string* body_out) {
@@ -2486,6 +2510,7 @@ int RunNetworkLogCli(int argc,
     return 1;
   }
   NetworkLogDebug("connected websocket");
+  SetSocketTimeout(fd, 250);
   std::string ws_error;
   std::string ws_prefetch;
   if (!WebSocketHandshake(fd, host.empty() ? "127.0.0.1" : host, port, path,
