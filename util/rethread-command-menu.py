@@ -98,6 +98,32 @@ def whitelist_current_host() -> int:
   return 0
 
 
+def right_click_handler_path() -> Path:
+  return config_dir() / "right-click-handler.py"
+
+
+def bind_right_click(save_dest: str) -> int:
+  handler = right_click_handler_path()
+  subprocess.run(
+      [
+          "rethread",
+          "bind",
+          "--context-menu",
+          f"{handler} --save {save_dest}",
+      ],
+      check=True,
+  )
+  return 0
+
+
+def set_right_click_clipboard() -> int:
+  return bind_right_click("clipboard")
+
+
+def set_right_click_tmpfile() -> int:
+  return bind_right_click("/tmp/rethread-rclick")
+
+
 def find_menu_binary() -> list[str] | None:
   candidates = [
       (["rofi", "-dmenu"], "rofi"),
@@ -155,6 +181,8 @@ def main(argv: list[str]) -> int:
   actions: dict[str, MenuAction] = {
       "refresh/reload the page": refresh_page,
       "add current host to iframe whitelist": whitelist_current_host,
+      "right-click: copy to clipboard": set_right_click_clipboard,
+      "right-click: append to /tmp/rethread-rclick": set_right_click_tmpfile,
   }
 
   args = parse_args(argv)
