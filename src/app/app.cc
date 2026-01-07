@@ -294,7 +294,7 @@ void BrowserApplication::ApplyDefaultDownloadBehavior(
 
 QString BrowserApplication::DownloadHandlerPath() const {
   return QString::fromStdString(DefaultConfigDir()) +
-         QStringLiteral("/rethread-download-handler.py");
+         QStringLiteral("/rethread-download-handler");
 }
 
 void BrowserApplication::InitializeUi() {

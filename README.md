@@ -31,7 +31,7 @@ make
 The `rethread` binary is a light CLI wrapper. Use `rethread browser ...` to
 launch the UI and `rethread tabs ...` to talk to a running instance without
 reloading the Qt stack each time. After startup, the browser automatically runs
-`$XDG_CONFIG_HOME/rethread/startup.sh` (override with `--startup-script=PATH`)
+`$XDG_CONFIG_HOME/rethread/init` (override with `--startup-script=PATH`)
 so you can pre-register keybindings or tweak state declaratively.
 `rethread tabs open` inserts the new tab immediately after the active tab; add
 `--at-end` to append to the end of the strip when you need the old behavior.
@@ -56,7 +56,7 @@ Each binding accepts modifier flags (`--alt`, `--ctrl`, `--shift`,
 `--command`/`--meta`), a `--key=<value>`, optional `--no-consume`, and the shell
 command to run after `--`. Commands execute via `/bin/sh -c ...`, so any shell
 snippet works. Drop the same lines into
-`$XDG_CONFIG_HOME/rethread/startup.sh` to have them applied automatically on launch.
+`$XDG_CONFIG_HOME/rethread/init` to have them applied automatically on launch.
 Use `rethread unbind [mods] --key=...` to clear a binding and fall back to the
 browser's default behavior for that key combo.
 
@@ -94,7 +94,7 @@ few environment variables so the script knows what was under the cursor:
 
 The helper installed at `$XDG_CONFIG_HOME/rethread/right-click-handler.py`
 copies `RETHREAD_CONTEXT_SOURCE_URL` to the clipboard via `wl-copy`, so you can
-right-click media to grab its URL instantly. `util/startup.sh` wires it up
+right-click media to grab its URL instantly. `util/init` wires it up
 automatically when present.
 
 ## per-site rules

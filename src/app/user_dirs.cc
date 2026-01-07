@@ -50,7 +50,7 @@ std::string DefaultConfigDir() {
 }
 
 std::string DefaultStartupScriptPath() {
-  return DefaultConfigDir() + "/startup.sh";
+  return DefaultConfigDir() + "/init";
 }
 
 std::string CdpPortPath(const std::string& user_data_dir) {

@@ -239,7 +239,7 @@ void PrintHelp() {
       << "  --debug-log=PATH        Append debug output to PATH.\n"
       << "  --auto-exit=SECONDS     Quit automatically after SECONDS.\n"
       << "  --startup-script=PATH   Run PATH after launch (defaults to\n"
-      << "                          $XDG_CONFIG_HOME/rethread/startup.sh).\n"
+      << "                          $XDG_CONFIG_HOME/rethread/init).\n"
       << "  --color-scheme=SCHEME   Force auto, light, or dark (default: dark).\n"
       << "  --cdp-port=PORT         Enable CDP on PORT (default: 9222).\n"
       << "  --cdp-disable           Disable the CDP debug port.\n";
