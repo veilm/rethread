@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -104,12 +105,19 @@ def right_click_handler_path() -> Path:
 
 def bind_right_click(save_dest: str) -> int:
   handler = right_click_handler_path()
+  command = f"{shlex.quote(str(handler))} --save {shlex.quote(save_dest)}"
+  user_data_dir = os.environ.get("RETHREAD_USER_DATA_DIR")
+  if user_data_dir:
+    command = (
+        f"export RETHREAD_USER_DATA_DIR={shlex.quote(user_data_dir)} ; "
+        f"{command}"
+    )
   subprocess.run(
       [
           "rethread",
           "bind",
           "--context-menu",
-          f"{handler} --save {save_dest}",
+          command,
       ],
       check=True,
   )

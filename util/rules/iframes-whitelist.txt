@@ -1,2 +1,4 @@
 google.com
 youtube.com
+cloudflare.com
+challenges.cloudflare.com
