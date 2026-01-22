@@ -70,7 +70,8 @@ bool RulesManager::ShouldDisableJavaScript(const QUrl& url) const {
 }
 
 bool RulesManager::ShouldBlockIframe(const QUrl& top_level_url,
-                                     const QUrl& frame_url) const {
+                                     const QUrl& frame_url,
+                                     QString* reason) const {
   if (!iframe_rules_.configured || !frame_url.isValid()) {
     return false;
   }
@@ -80,13 +81,30 @@ bool RulesManager::ShouldBlockIframe(const QUrl& top_level_url,
       !frame_host.isEmpty() && iframe_rules_.hosts.contains(frame_host);
   const bool top_match =
       !top_host.isEmpty() && iframe_rules_.hosts.contains(top_host);
+  const QString mode_text =
+      iframe_rules_.mode == ListMode::kAllowlist ? QStringLiteral("allowlist")
+                                                 : QStringLiteral("blacklist");
   if (iframe_rules_.mode == ListMode::kAllowlist) {
     if (!frame_host.isEmpty() && frame_host == top_host) {
       return false;
     }
-    return !(frame_match || top_match);
+    const bool block = !(frame_match || top_match);
+    if (block && reason) {
+      *reason = mode_text + QStringLiteral(" no match");
+    }
+    return block;
   }
-  return frame_match || top_match;
+  const bool block = frame_match || top_match;
+  if (block && reason) {
+    if (frame_match && top_match) {
+      *reason = mode_text + QStringLiteral(" frame+top match");
+    } else if (frame_match) {
+      *reason = mode_text + QStringLiteral(" frame match");
+    } else {
+      *reason = mode_text + QStringLiteral(" top match");
+    }
+  }
+  return block;
 }
 
 RulesManager::HostRule RulesManager::BuildRule(ListMode mode,

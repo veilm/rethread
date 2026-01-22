@@ -30,7 +30,8 @@ class RulesManager : public QObject {
 
   bool ShouldDisableJavaScript(const QUrl& url) const;
   bool ShouldBlockIframe(const QUrl& top_level_url,
-                         const QUrl& frame_url) const;
+                         const QUrl& frame_url,
+                         QString* reason = nullptr) const;
 
  signals:
   void javaScriptRulesChanged();
